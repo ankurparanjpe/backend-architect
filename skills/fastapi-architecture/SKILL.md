@@ -524,7 +524,7 @@ conventions — see [Scope](#scope).
 | `BackgroundTasks` for anything you'd page on | No retry, dies with the worker process. | Use Celery / Arq / RQ. |
 | Calling a sync ORM session inside `async def` | Blocks the loop, may deadlock the connection pool. | Use `AsyncSession`. |
 | Returning a Pydantic model *and* also setting `response_model=` to that same class | Model gets constructed twice (once to validate, once to serialize). | Return a `dict`/ORM row and let `response_model` validate, or drop `response_model` and trust the return type. |
-| Mocking the database in integration tests | Mock/prod divergence eventually fires in prod. | Use a real DB (testcontainers, ephemeral schema) and `dependency_overrides` for auth/external services. |
+| Mocking the database in integration tests | Mock/prod divergence eventually fires in prod. | Use a real DB (testcontainers, ephemeral schema) and `dependency_overrides` for auth/external services. This is the FastAPI mechanism for a cross-cutting rule — see testing-standards § Test pyramid balance. |
 | Running Uvicorn directly in prod with no process manager | One crash takes down all capacity. | Gunicorn + `UvicornWorker`, or an orchestrator that restarts the process. |
 | `@app.on_event("startup"/"shutdown")` | Deprecated; doesn't guarantee pairing under reload. | `lifespan` async context manager. |
 | Liveness probe that queries the DB | A slow dependency takes a healthy process out of rotation. | Liveness = process check only; readiness = dependency check. |

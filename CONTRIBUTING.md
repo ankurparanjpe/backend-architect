@@ -106,3 +106,11 @@ If the principle doesn't survive stripping the syntax, it was framework-specific
   pattern: one file with deliberately planted violations, one script that prompts against
   only that skill's hard-rule table and expects each violation back.
 - **A row in the README's "What's included" table**, plus a version bump.
+- **Registration in `/audit-architecture`.** A new cross-cutting skill has to be added to
+  the dispatch list in [`commands/audit-architecture.md`](commands/audit-architecture.md)
+  §4 *and* to `tests/fixtures/audit-architecture/check.sh` (its fixture in the input list,
+  its expected violations as `check_in` lines). A skill that isn't in both is invisible to
+  the command, and nothing else catches that. This matters most when the new skill's rule
+  pairs with an existing framework-skill rule — the audit check is what verifies each
+  violation is still attributed to the intended skill rather than drifting to its
+  cross-referenced twin.

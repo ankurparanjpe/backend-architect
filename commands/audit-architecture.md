@@ -12,7 +12,7 @@ Raw arguments: `$ARGUMENTS`
 
 From `$ARGUMENTS`, extract:
 - `--framework=<fastapi|django|flask>` if present — overrides auto-detection in step 3.
-- `--skip=<comma-separated skill names>` if present (e.g. `backend-caching,backend-performance`)
+- `--skip=<comma-separated skill names>` if present (e.g. `backend-caching,testing-standards`)
   — these skills are excluded from dispatch entirely and listed as "skipped by request" in
   the final summary.
 - Whatever remains after stripping the two flags above is the **target**: a file path, a
@@ -48,7 +48,8 @@ yet — skipping framework-specific check," and proceed with the cross-cutting s
 
 Start with:
 - the detected/overridden framework skill, if its `SKILL.md` exists
-- `backend-security`, `backend-observability`, `backend-caching`, `backend-performance`
+- `backend-security`, `backend-observability`, `backend-caching`, `backend-performance`,
+  `testing-standards`
 
 Remove any skill named in `--skip=`.
 
