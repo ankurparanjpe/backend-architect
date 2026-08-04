@@ -18,10 +18,34 @@ description: >
 Production-grade rules for FastAPI services. Assumes FastAPI ≥ 0.115, Pydantic ≥ 2.7,
 SQLAlchemy ≥ 2.0 (async), Python ≥ 3.11.
 
-## Project structure — organize by domain, not by file type
+## Scope
 
-One package per bounded context. Don't split into global `routers/`, `models/`, `schemas/`
-folders — that scatters everything about one feature across the codebase.
+This skill enforces two different kinds of rules:
+
+- **Hard rules** — correctness and reliability issues: async/blocking-call misuse,
+  `BackgroundTasks` used for work that needs retries or durability, missing input
+  validation, secrets committed to code, and anything else that's a bug rather than a
+  style choice. These are flagged as violations regardless of the project's age or
+  existing conventions.
+- **Structural preferences** — organizational recommendations: domain-based vs layered
+  folder structure, naming conventions, file layout. These are advisory only. If a
+  project already has an established structural convention (e.g. Clean Architecture /
+  layered folders) that differs from the domain-based recommendation below, don't flag
+  it as a violation — note it only if asked to audit structure specifically, and frame
+  it as "this project uses X instead of the domain-based convention," not as an error.
+  The domain-based structure is a recommendation for projects starting fresh with no
+  existing convention, not a migration target for established codebases.
+
+## Project structure (structural preference — advisory)
+
+> Advisory, not a hard rule — see [Scope](#scope). This is the recommended layout for a
+> **new** FastAPI project with no established convention. If an existing project already
+> follows a different convention, don't flag deviations from this section as violations;
+> only note them if asked to audit structure specifically.
+
+One package per bounded context, when starting fresh. Don't split into global `routers/`,
+`models/`, `schemas/` folders — that scatters everything about one feature across the
+codebase.
 
 ```
 src/
@@ -340,7 +364,12 @@ mypy src
 existing project's lint config with these defaults. These are only the starting point for
 a project that has none.
 
-## Anti-patterns — check for these when reviewing a diff
+## Anti-patterns
+
+### Hard rules — always flag as violations
+
+Correctness and reliability bugs. Flag these regardless of the project's age or existing
+conventions — see [Scope](#scope).
 
 | Anti-pattern | Why it's wrong | Fix |
 |---|---|---|
@@ -355,9 +384,19 @@ a project that has none.
 | `BackgroundTasks` for anything you'd page on | No retry, dies with the worker process. | Use Celery / Arq / RQ. |
 | Calling a sync ORM session inside `async def` | Blocks the loop, may deadlock the connection pool. | Use `AsyncSession`. |
 | Returning a Pydantic model *and* also setting `response_model=` to that same class | Model gets constructed twice (once to validate, once to serialize). | Return a `dict`/ORM row and let `response_model` validate, or drop `response_model` and trust the return type. |
-| Importing across domains via deep paths (`from src.auth.service.user import ...`) | Tight coupling, hard to refactor. | `from src.auth import service as auth_service`. |
-| One `BaseSettings` for the whole app | Every domain reads every var; hard to reason about ownership. | One `BaseSettings` subclass per domain. |
 | Mocking the database in integration tests | Mock/prod divergence eventually fires in prod. | Use a real DB (testcontainers, ephemeral schema) and `dependency_overrides` for auth/external services. |
 | Running Uvicorn directly in prod with no process manager | One crash takes down all capacity. | Gunicorn + `UvicornWorker`, or an orchestrator that restarts the process. |
 | `@app.on_event("startup"/"shutdown")` | Deprecated; doesn't guarantee pairing under reload. | `lifespan` async context manager. |
 | Liveness probe that queries the DB | A slow dependency takes a healthy process out of rotation. | Liveness = process check only; readiness = dependency check. |
+
+### Structural preferences — advisory, respect existing convention
+
+These follow from the domain-based [project structure](#project-structure-structural-preference---advisory)
+recommendation above. Don't flag them as violations in a project with an established,
+different convention — note them only if asked to audit structure specifically, framed as
+"this project uses X" rather than an error.
+
+| Pattern | Domain-based rationale | If the project uses a different convention |
+|---|---|---|
+| Deep cross-domain imports (`from src.auth.service.user import ...`) instead of module-level (`from src.auth import service as auth_service`) | Tight coupling between domains, harder to refactor | Note it as "this project imports across modules via deep paths" — not a violation under a layered/other convention |
+| One `BaseSettings` for the whole app instead of one per domain | Every domain ends up reading every env var; unclear ownership | Note it as "this project uses a single global settings object" — not a violation under a layered/monolithic convention |
