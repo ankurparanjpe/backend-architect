@@ -340,6 +340,61 @@ safe" — that defeats the projection and reintroduces the over-serialization th
 exists to prevent. See the double-construction anti-pattern below for the related pitfall
 of also manually constructing the Pydantic model before returning it.
 
+## Error responses — the FastAPI mechanism
+
+backend-security owns the rules here (one consistent error schema, status codes that carry
+the failure, no internal detail in the response body). This section is only the FastAPI
+wiring for them — see backend-security § Error responses for the *what* and *why*.
+
+`HTTPException` produces `{"detail": ...}`, and FastAPI's own request-validation failures
+produce a `422` with a different shape again (`{"detail": [{"loc": ..., "msg": ...}]}`). If
+the project uses its own envelope, both need reshaping via `@app.exception_handler` —
+otherwise framework-generated errors are the endpoints that don't match the contract.
+
+```python
+# DO — domain exceptions mapped to the project's envelope in one place
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
+
+# DO — reshape FastAPI's own 422 so validation errors match the same contract
+@app.exception_handler(RequestValidationError)
+async def validation_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"error": {"code": "validation_error", "message": "Invalid request.",
+                           "fields": exc.errors()}},
+    )
+
+# DO — catch-all: log the trace, return nothing internal
+@app.exception_handler(Exception)
+async def unhandled_handler(request: Request, exc: Exception):
+    logger.exception("unhandled error", extra={"path": request.url.path})
+    return JSONResponse(status_code=500, content={"error": {"code": "internal_error",
+                                                            "message": "An internal error occurred."}})
+```
+
+Raise these from dependencies and services, not by returning error dicts from routes — the
+`raise PostNotFound()` pattern in [Validate inside dependencies](#validate-inside-dependencies-not-just-inject)
+is what keeps every route's error path going through the handler. Note also that
+`debug=True` on `FastAPI()`/Uvicorn's `--reload` tooling surfaces tracebacks in responses;
+that must be config-driven and off in production.
+
+Also declare error responses in the OpenAPI schema so the contract is documented, not just
+implemented:
+
+```python
+@router.get("/posts/{post_id}", response_model=PostPublic,
+            responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}})
+```
+
+The bare-`except Exception` row in the anti-pattern table below is the other half of this:
+that row covers swallowing the exception, this section covers what the client gets once it
+propagates.
+
 ## Production deployment
 
 ### Uvicorn/Gunicorn worker config

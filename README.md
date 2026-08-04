@@ -46,7 +46,7 @@ marketplace, so plugin and marketplace share the name).
 | Skill | Covers |
 |---|---|
 | `fastapi-architecture` | FastAPI-specific rules: async vs sync routes, `BackgroundTasks` vs Celery/Arq/RQ, `Annotated` dependency injection, SQLAlchemy 2.0 async conventions, domain-based project structure, ruff defaults, Uvicorn/Gunicorn workers and lifespan/health checks. |
-| `backend-security` | CORS configuration, rate limiting, secrets and env handling, security headers, boundary input validation, auth patterns beyond JWT decode. |
+| `backend-security` | CORS configuration, rate limiting, secrets and env handling, security headers, boundary input validation, error-response standardization (consistent schema, correct status codes, no leaked internals), auth patterns beyond JWT decode. |
 | `backend-observability` | Structured logging, request/correlation ID propagation, service-boundary logging, secret/PII redaction, log level discipline, exception logging with context. |
 | `backend-caching` | Cache layering (HTTP/application/dependency), key design and versioning, invalidation strategy, safe scoping of cached data. |
 | `backend-performance` | Pagination enforcement, HTTP/DB client reuse, connection pool sizing, N+1 query detection, response payload shaping. |

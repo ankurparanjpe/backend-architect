@@ -6,6 +6,8 @@ skill's hard-rule detection still fires; see
 tests/fixtures/backend-security/check.sh.
 """
 
+import traceback
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -39,12 +41,31 @@ async def signup(data: SignupIn):
     return {"token": token}
 
 
+@app.post("/login")
+async def login(data: SignupIn):
+    user = authenticate(data.email, data.password)
+    if not user:
+        # violation: failure returned as HTTP 200 with the error in the body
+        return {"success": False, "msg": "invalid credentials"}
+    return {"success": True, "token": jwt.encode({"sub": user.id}, JWT_SECRET, algorithm="HS256")}
+
+
 @app.delete("/posts/{post_id}")
 async def delete_post(post_id: str, request: Request):
     user = get_current_user(request)
     post = get_post(post_id)
     if user.role != "admin" and user.id != post.owner_id:  # violation: inline permission check
+        # violation: error shape differs from /login and /orders below
         return {"error": "forbidden"}
     query = f"DELETE FROM posts WHERE id={post_id}"  # violation: string-formatted SQL
     db_execute(query)
     return {"ok": True}
+
+
+@app.get("/orders/{order_id}")
+async def get_order(order_id: str):
+    try:
+        return fetch_order(order_id)
+    except Exception as exc:
+        # violation: internal exception/DB error text returned to the client
+        return {"errors": [{"detail": str(exc), "trace": traceback.format_exc()}]}

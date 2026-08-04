@@ -40,6 +40,9 @@ check "extra|forbid|role|privileged"     "unforbidden extra fields / client-boun
 check "long-lived|refresh|365"           "long-lived token used as client-side session token"
 check "permission|inline|admin"          "inline permission check instead of centralized"
 check "sql|injection|f-string|format"    "string-formatted SQL"
+check "200|status code|success.*false" "failure returned as HTTP 200 with error in body"
+check "shape|inconsistent|schema|envelope" "inconsistent error response shape per route"
+check "leak|internal|stack|trace|str\(exc\)" "internal exception detail leaked to client"
 
 if [ "$FAIL" -eq 0 ]; then
   echo "OK: all expected hard-rule violations detected"

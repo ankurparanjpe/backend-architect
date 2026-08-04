@@ -3,10 +3,12 @@ name: backend-security
 description: >
   Cross-cutting backend security rules that apply regardless of framework: CORS
   configuration, rate limiting, secrets/env handling, security headers, input validation
-  at the boundary, and auth patterns beyond JWT decode (token lifetimes, refresh flow,
-  permission checks). Use when the work touches authentication/authorization, CORS,
-  rate limiting, secrets or environment variables, security headers, or request/input
-  validation, in any backend framework (FastAPI, Django, Flask, Express, etc.) or with no
+  at the boundary, error-response standardization (consistent error schema, correct HTTP
+  status codes, no internal detail leaked to clients), and auth patterns beyond JWT decode
+  (token lifetimes, refresh flow, permission checks). Use when the work touches
+  authentication/authorization, CORS, rate limiting, secrets or environment variables,
+  security headers, request/input validation, or the shape and status codes of error
+  responses returned to clients, in any backend framework (FastAPI, Django, Flask, Express, etc.) or with no
   framework named at all. This skill does not cover framework-specific implementation
   details (e.g. FastAPI's `Depends`/`Annotated` wiring, Django's `SECURE_*` settings
   surface) — pair it with the matching framework skill (fastapi-architecture,
@@ -27,11 +29,12 @@ This skill enforces two different kinds of rules:
 
 - **Hard rules** — security issues that are exploitable or fail open: wildcard CORS in
   production, no rate limiting on public endpoints, hardcoded secrets, missing security
-  headers, trusting client input past the boundary, long-lived tokens stored client-side.
-  These are flagged as violations regardless of the project's age or existing
-  conventions.
+  headers, trusting client input past the boundary, leaking internal detail in error
+  responses, long-lived tokens stored client-side. These are flagged as violations
+  regardless of the project's age or existing conventions.
 - **Structural preferences** — organizational recommendations: where permission checks
-  live, how auth dependencies are composed, naming of security-related config. These are
+  live, how auth dependencies are composed, the exact field names in the error schema,
+  naming of security-related config. These are
   advisory only. If a project has an established convention that differs, don't flag it
   as a violation — note it only if asked to audit structure specifically.
 
@@ -184,6 +187,155 @@ system), and reject anything unexpected rather than silently dropping or coercin
   escaping (auto-escaping template engine, or explicit escape); a validated `str` used
   in a raw SQL string still needs parameterization, not just a length check.
 
+## Error responses
+
+The inbound side of the trust boundary is [input validation](#input-validation); this is the
+outbound side. Errors are part of the API contract, and an error path that's improvised per
+route is both unparseable for clients and the most common way internal detail escapes.
+
+### One error schema, every endpoint
+
+**Hard rule**: all endpoints return errors in the same shape. Ad-hoc, per-route error
+bodies are a violation, not a style inconsistency — a client can't write one error handler
+against a contract that changes shape depending on which route failed, so it ends up
+either string-matching on messages or ignoring error bodies entirely.
+
+```python
+# DON'T — three routes, three shapes, no client can parse this generically
+@router.post("/login")
+async def login(...):
+    return {"error": "invalid credentials"}          # bare string under "error"
+
+@router.get("/posts/{post_id}")
+async def get_post(...):
+    return {"errors": [{"detail": "not found"}]}     # list under "errors"
+
+@router.delete("/posts/{post_id}")
+async def delete_post(...):
+    return {"message": "forbidden", "ok": False}     # something else again
+
+# DO — one envelope, defined once, produced by one handler
+class ErrorBody(BaseModel):
+    code: str        # stable, machine-readable: "invalid_credentials", "post_not_found"
+    message: str     # human-readable, safe to show a user
+
+class ErrorResponse(BaseModel):
+    error: ErrorBody
+```
+
+The `code` field is what clients branch on, so it has to be stable and machine-readable —
+a code that's really a prose sentence forces clients back to string-matching on `message`,
+which then can't be reworded without breaking them.
+
+Produce the envelope in **one place** — a global exception handler / error middleware that
+maps the application's exception types onto it — not by hand-constructing the dict in every
+route. Per-route construction is what lets the shape drift in the first place, and it's
+also what lets an unmapped exception fall through to the framework's own default error
+body, which is a different shape again.
+
+### Status codes carry the failure
+
+**Hard rule**: the HTTP status code communicates the failure. Returning `200 OK` with a
+failure described in the body is a hard violation — every layer between the service and the
+client (load balancers, proxies, retry logic, HTTP client libraries, error-rate monitoring,
+alerting) reads the status code, so a failure hidden in a `200` body is invisible to all of
+them. Error rates read as zero while users see failures.
+
+```python
+# DON'T — the request failed; the status says it succeeded
+@router.post("/login")
+async def login(data: LoginIn):
+    user = await authenticate(data)
+    if not user:
+        return {"success": False, "error": "invalid credentials"}   # HTTP 200
+
+# DO — status code and body agree
+@router.post("/login")
+async def login(data: LoginIn):
+    user = await authenticate(data)
+    if not user:
+        raise InvalidCredentials()   # → 401, mapped to the error envelope by the handler
+```
+
+| Status | Use when | Not when |
+|---|---|---|
+| `400 Bad Request` | The request is malformed or semantically invalid in a way schema validation doesn't cover (e.g. `end_date` before `start_date`). | The body simply failed schema validation — that's `422`. |
+| `401 Unauthorized` | No credentials, or credentials that are missing/expired/invalid. The caller is **unauthenticated**. | The caller is known but not allowed — that's `403`. |
+| `403 Forbidden` | Credentials are valid but the caller lacks permission for this action. Re-authenticating won't help. | The caller isn't authenticated at all — that's `401`. |
+| `404 Not Found` | The resource doesn't exist — or exists but the caller must not learn that it does (see below). | A validation failure on a resource that does exist. |
+| `422 Unprocessable Entity` | Request body/params failed schema validation (wrong type, missing required field, constraint violated). | A business-rule failure on a well-formed body — that's `400` or a domain-specific `409`. |
+| `500 Internal Server Error` | An unhandled/unexpected server-side fault. Always accompanied by a logged stack trace server-side. | The client sent something wrong — never return `500` for a client error, it makes real faults unfindable in monitoring. |
+
+`401` vs `403` is the pair that gets confused most, and getting it wrong breaks clients:
+a client that sees `401` will try to refresh its token and retry, which is correct for
+expired credentials and a pointless retry loop for a permission failure.
+
+Prefer `404` over `403` when the existence of the resource is itself privileged — a `403`
+on `/users/{id}/documents/{doc_id}` confirms that `doc_id` exists, which is an enumeration
+oracle. Pick one behaviour and apply it consistently; alternating between `403` and `404`
+for the same class of resource leaks the same information through the difference.
+
+### Never leak internal detail
+
+**Hard rule**: error responses returned to clients in production must never contain stack
+traces, raw exception strings, database error text, SQL fragments, file paths, or internal
+hostnames. This is a correctness bug with a security consequence, not a polish issue — those
+strings are reconnaissance: a leaked `psycopg2` error names tables and columns, a stack
+trace names internal modules and library versions, a file path names the deploy layout.
+
+```python
+# DON'T — hands the client the internals of the failure
+@router.get("/orders/{order_id}")
+async def get_order(order_id: str):
+    try:
+        return await service.get_order(order_id)
+    except Exception as exc:
+        return {"error": str(exc)}                    # DB error text, SQL, table names
+        # or worse:
+        # return {"error": traceback.format_exc()}
+
+# DO — full detail to the logs, a generic message plus a correlation id to the client
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("unhandled error", extra={"path": request.url.path})
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"code": "internal_error", "message": "An internal error occurred."}},
+    )
+```
+
+The detail isn't discarded — it goes to the logs, where it's needed for debugging and where
+only operators can read it. Return a correlation/request id in the error body so a user
+report can be tied back to the logged trace without the trace itself crossing the boundary;
+see backend-observability for the request-id propagation and log-redaction rules that make
+this work.
+
+Two related traps:
+
+- **Debug mode in production.** A framework's debug/development mode renders stack traces
+  into HTTP responses by design. Debug must be driven by config and off in production —
+  a debug flag defaulting to `True` is the same violation delivered by the framework.
+- **Different messages for the same failure class.** "user not found" vs "wrong password"
+  on a login endpoint is a user-enumeration oracle. Both must return the same generic
+  credentials error with the same status code; the distinction goes to the logs only.
+
+### Error schema field naming (structural preference — advisory)
+
+> Advisory, not a hard rule — see [Scope](#scope).
+
+Whether the envelope is `{"error": {...}}`, `{"errors": [...]}`, `{"detail": ...}`, or a
+standard like RFC 9457 `application/problem+json` is a project convention, and there's no
+single right answer to prescribe. Frameworks also come with their own default (FastAPI's
+`HTTPException` produces `{"detail": ...}`), and adopting that default is a legitimate
+choice.
+
+The hard rule is **be consistent** — one shape, everywhere, including framework-generated
+errors like validation failures, which need an exception handler to be reshaped into the
+project's envelope rather than being left as the odd one out. If a project already has an
+established error shape, don't flag it as a violation for not matching the `{"error":
+{"code", "message"}}` example above; flag only endpoints that deviate from the project's
+own shape.
+
 ## Auth patterns beyond JWT decode
 
 **Hard rule**: short-lived access tokens (minutes, not days) + a separate long-lived
@@ -256,6 +408,13 @@ async def delete_post(post: Annotated[Post, Depends(require_post_owner_or_admin)
 | Permission check (`if user.role != "admin"`) repeated inline per route | Drifts — permission model changes don't propagate to every check. | Centralize via a dependency/middleware every protected route goes through. |
 | String-formatted SQL with user input (`f"SELECT * FROM x WHERE id={id}"`) | SQL injection. | Parameterized queries / ORM query builder. |
 | Rendering unescaped user input into HTML | XSS. | Auto-escaping template engine, or explicit escaping at the sink. |
+| Error bodies with a different shape per route (`{"error": "..."}` here, `{"errors": [...]}` or `{"message": ..., "ok": false}` there) | No client can write one error handler against a contract that changes shape per route; it falls back to string-matching or ignoring error bodies. | One error schema for the whole API, emitted by a single exception handler / error middleware. |
+| Failure returned as `200 OK` with the error in the body (`{"success": false, ...}`) | Proxies, retries, HTTP clients, and error-rate monitoring all read the status code — a failure hidden in a `200` is invisible to every one of them. | Raise/return the correct 4xx/5xx status; body and status must agree. |
+| `500` for a client error, or `4xx` for a server fault | Real faults become unfindable in monitoring, and clients retry things that will never succeed. | Map the failure to the right code — `401` unauthenticated, `403` unauthorized, `422` schema validation, `400` other invalid request, `500` server fault only. |
+| `403` where the resource's existence is itself privileged | Confirms the resource exists — an enumeration oracle. | `404` for privileged resources, applied consistently across that resource class. |
+| Stack trace, `str(exc)`, DB error text, SQL, or file path returned in an error response | Reconnaissance: names tables, columns, internal modules, library versions, deploy layout. | Log full detail server-side; return a generic message plus a correlation id. |
+| Debug/development mode enabled in production (or a debug flag defaulting to `True`) | The framework renders stack traces into HTTP responses by design. | Drive debug from config; off in production, default `False`. |
+| Distinguishable error messages for the same failure class ("user not found" vs "wrong password") | User-enumeration oracle. | One generic message and status for the class; the distinction goes to the logs only. |
 
 ### Structural preferences — advisory, respect existing convention
 
@@ -263,3 +422,4 @@ async def delete_post(post: Annotated[Post, Depends(require_post_owner_or_admin)
 |---|---|---|
 | Permission checks composed via dependency injection vs. a decorator-based permission system | Keeps checks colocated with route composition, reuses the same DI graph as other route deps | Note it as "this project uses decorator-based permissions" — not a violation if consistently applied |
 | One `SecurityConfig`/`AuthConfig` settings class vs. security-related env vars scattered across the app | Clear ownership of security-relevant config | Note only if asked to audit config structure specifically |
+| Error envelope field naming — `{"error": {...}}` vs `{"errors": [...]}` vs `{"detail": ...}` vs RFC 9457 `problem+json` | A single machine-readable `code` plus a human-readable `message` covers both client branching and display | Adopt the project's existing shape (including a framework default like FastAPI's `{"detail": ...}`); flag only endpoints deviating from *that* shape, never the shape itself |
