@@ -1,5 +1,7 @@
 # backend-architect
 
+[![CI](https://github.com/ankurparanjpe/backend-architect/actions/workflows/ci.yml/badge.svg)](https://github.com/ankurparanjpe/backend-architect/actions/workflows/ci.yml)
+
 A Claude Code plugin that enforces production-grade backend architecture standards while you
 write and review code. It ships one framework skill (FastAPI) plus four cross-cutting skills
 (security, observability, caching, performance) that apply to any backend, and an
@@ -84,6 +86,16 @@ grouped by skill, hard-rule violations separated from advisory notes.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) — adding a hard rule to an existing skill, proposing a
 new skill, and the conventions any new skill content has to keep.
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs two checks on every push and
+pull request: manifest validation plus the version-bump rule (`tests/check_version_bump.sh`,
+hard fail), and a warning-only scan for overlapping trigger wording across skill descriptions
+(`python3 tests/check_descriptions.py`). Both run locally as well.
+
+CI does **not** run the skill fixture checks in `tests/fixtures/` — those invoke `claude -p`,
+so they need API access, and verifying them is a contributor responsibility. A green badge
+means the manifests and version bump are fine, not that every skill's rules still fire. See
+[CONTRIBUTING.md](CONTRIBUTING.md#what-ci-checks).
 
 ## Attribution
 

@@ -15,14 +15,50 @@ structural preference, and it belongs in that section instead.
    `tests/fixtures/<skill-name>/`. One planted violation per rule, so a regression is
    attributable to a single row. Keep the fixture realistic — code a reviewer would plausibly
    see, not a labelled minimal repro.
-3. **Confirm the fixture still triggers**: run `tests/fixtures/<skill-name>/check.sh` and
-   verify your new rule appears in the output *and* that the rules that were already there
-   still do. A new table row that shadows or dilutes an existing one is the common failure
-   mode here — the check is what catches it.
+3. **Run the fixture check locally and confirm it still triggers.** This step is on you —
+   **CI does not run it** (see [What CI checks](#what-ci-checks) below). Run
+   `tests/fixtures/<skill-name>/check.sh` with your own Claude Code install and API access —
+   the script shells out to `claude -p`, so it needs both — and verify that your new rule
+   appears in the output as a `VIOLATION:` line *and* that every `VIOLATION:` line that was
+   already expected still fires. The script exits non-zero and prints
+   `MISSING expected violation: ...` when one stops firing; a clean run ends in
+   `OK: all expected hard-rule violations detected`.
+
+   A new table row that shadows or dilutes an existing one is the common failure mode here,
+   and this check is the only thing that catches it. If your change touches the shared
+   hard-rule surface, also run `tests/fixtures/audit-architecture/check.sh`, which verifies
+   the `/audit-architecture` command still attributes each violation to the right skill.
 4. **Bump `version` in `.claude-plugin/plugin.json`** (patch level minimum) and keep
    `.claude-plugin/marketplace.json`'s version in sync — they're two copies of the same
-   number.
-5. Open the PR with the check output in the description.
+   number. `tests/check_version_bump.sh` verifies both locally, against the same base-branch
+   comparison CI uses.
+5. **Open the PR with the `check.sh` output pasted into the description**, and make sure it
+   passes CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+
+## What CI checks
+
+CI is deliberately narrow. It runs two checks on every push and pull request, both of which
+work with nothing but the repo itself:
+
+- **Manifests and version bump** (`tests/check_version_bump.sh`) — hard fail. Validates that
+  `plugin.json` and `marketplace.json` are well-formed and carry the same version, and that
+  if any `skills/*/SKILL.md` or `commands/*.md` changed relative to the base branch, the
+  version was actually bumped.
+- **Skill description overlap** (`python3 tests/check_descriptions.py`) — warning only, does
+  not fail the build. Flags trigger wording claimed by more than one skill, and descriptions
+  missing negative scope or a sibling pointer.
+
+**CI does not verify fixture correctness.** Nothing in the workflow runs
+`tests/fixtures/*/check.sh`. Those scripts invoke `claude -p`, so they need an API key and
+they grade model output, which makes them a poor fit for automation in a plugin repo — and
+this repo has no key configured, by choice. So a green CI badge means *the manifests and the
+version bump are fine*, and nothing more. It does not mean your rule still fires.
+
+**Fixture correctness is verified by the contributor, not by CI.** Step 3 above is the real
+regression test for skill content, and running it is a condition of opening the PR, not an
+optional extra. Paste the output into the PR description. Reviewers may ask for fixture
+output — or for a re-run — whenever a change to a hard-rule table makes it doubtful that the
+existing rules still fire.
 
 ## Proposing a new skill
 
