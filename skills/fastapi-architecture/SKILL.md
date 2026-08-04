@@ -261,6 +261,85 @@ metadata = MetaData(naming_convention=POSTGRES_INDEXES_NAMING_CONVENTION)
 Do joins, aggregation, and JSON shaping in SQL — Postgres is faster than CPython at this.
 Hydrate into Pydantic only for response validation, not for transformation.
 
+### Connection pool sizing
+
+**Hard rule**: `pool_size` is a deliberate choice, reasoned about against Gunicorn worker
+count and the database's own `max_connections` — not left at SQLAlchemy's default. Each
+worker process gets its own engine and its own pool, so the real ceiling is
+`workers × (pool_size + max_overflow)`, not the value of `pool_size` alone.
+
+```python
+engine = create_async_engine(
+    str(settings.DATABASE_URL),
+    pool_pre_ping=True,
+    pool_size=10,        # steady-state connections held open per worker
+    max_overflow=5,      # extra connections allowed during a burst, then closed
+    pool_timeout=30,     # seconds to wait for a free connection before raising
+)
+```
+
+With 4 Gunicorn workers and the values above, this app can hold up to
+`4 × (10 + 5) = 60` connections open against the database at once — check that against
+Postgres's `max_connections` (default 100, and shared with every other client) before
+picking the numbers, not after.
+
+### N+1 prevention — eager loading
+
+**Hard rule**: a loop that issues one query per row of an earlier result (N+1) must be
+rewritten to eager-load the related data in the original query. `selectinload` issues one
+extra query total for the related rows (best default for one-to-many collections);
+`joinedload` pulls the related rows in via a `JOIN` in the same query (better for
+one-to-one/many-to-one, where a second query would be pure overhead).
+
+```python
+# DON'T — one query for orders, then one more query per order for its items
+orders = (await db.execute(select(Order))).scalars().all()
+for order in orders:
+    items = await db.execute(select(Item).where(Item.order_id == order.id))
+    order.items = items.scalars().all()
+
+# DO — selectinload: one query for orders, one query for all their items combined
+from sqlalchemy.orm import selectinload
+
+result = await db.execute(select(Order).options(selectinload(Order.items)))
+orders = result.scalars().all()
+
+# DO — joinedload: single query via JOIN, for a to-one relationship
+from sqlalchemy.orm import joinedload
+
+result = await db.execute(select(Order).options(joinedload(Order.customer)))
+```
+
+## Response model discipline
+
+**Hard rule**: every route that returns an ORM object declares a `response_model` that
+projects only the fields the response contract needs — never the raw ORM row with every
+column and loaded relationship. FastAPI serializes exactly the fields the `response_model`
+declares, so it also acts as the field-projection mechanism, not just validation.
+
+```python
+# DON'T — no response_model; whatever columns/relationships happen to be
+# loaded on the ORM row get serialized, including ones never meant to be public
+@router.get("/users/{user_id}")
+async def get_user(user_id: str):
+    return await db.get(User, user_id)
+
+# DO — response_model declares the exact shape returned to the client
+class UserPublic(BaseModel):
+    id: UUID4
+    email: str
+    display_name: str
+
+@router.get("/users/{user_id}", response_model=UserPublic)
+async def get_user(user_id: str):
+    return await db.get(User, user_id)
+```
+
+Don't reach for a `response_model` that mirrors every column on the ORM model "to be
+safe" — that defeats the projection and reintroduces the over-serialization this rule
+exists to prevent. See the double-construction anti-pattern below for the related pitfall
+of also manually constructing the Pydantic model before returning it.
+
 ## Production deployment
 
 ### Uvicorn/Gunicorn worker config
@@ -310,6 +389,12 @@ app = FastAPI(lifespan=lifespan)
 async def startup():
     app.state.http_client = httpx.AsyncClient()
 ```
+
+**Hard rule**: never construct a new `httpx.AsyncClient()` (or other pooled client)
+inside a route handler — always reuse the one created once in `lifespan` via
+`app.state`. A client built per request opens its own connection pool and pays
+connection-setup cost on every call; see backend-performance's HTTP/DB client reuse rule
+for the cross-cutting version of this that applies outside FastAPI too.
 
 ### Health checks
 
@@ -388,6 +473,10 @@ conventions — see [Scope](#scope).
 | Running Uvicorn directly in prod with no process manager | One crash takes down all capacity. | Gunicorn + `UvicornWorker`, or an orchestrator that restarts the process. |
 | `@app.on_event("startup"/"shutdown")` | Deprecated; doesn't guarantee pairing under reload. | `lifespan` async context manager. |
 | Liveness probe that queries the DB | A slow dependency takes a healthy process out of rotation. | Liveness = process check only; readiness = dependency check. |
+| `httpx.AsyncClient()` constructed inside a route handler instead of reused from `app.state` | Opens a new connection pool and pays setup cost on every request. | Construct once in `lifespan`, store on `app.state`, reuse across requests. |
+| `pool_size`/`max_overflow` left at SQLAlchemy defaults with no reasoning against worker count | `workers × (pool_size + max_overflow)` can exceed the DB's `max_connections`, or be too small and serialize requests behind pool waits. | Size deliberately against worker count and the DB's connection limit. |
+| Loop issuing one query per row of an earlier result (N+1) | Turns one request into 1+N round trips; cost scales linearly with result size. | `selectinload` (one-to-many) or `joinedload` (to-one) in the original query. |
+| Returning a full ORM row/object with no `response_model` (or one that mirrors every column) | Serializes fields the response contract never promised, including internal-only ones. | Define a `response_model` that projects only the fields the contract needs. |
 
 ### Structural preferences — advisory, respect existing convention
 

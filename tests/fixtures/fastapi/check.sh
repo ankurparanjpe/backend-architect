@@ -37,6 +37,9 @@ check() {
 check "on_event|lifespan"        "deprecated @app.on_event startup/shutdown"
 check "requests\.get|blocking"   "blocking requests.get() inside async def"
 check "bare|except"              "bare except around route body"
+check "pool_size|max_overflow|pool.*default"  "pool_size/max_overflow left at defaults"
+check "n\+1|selectinload|joinedload"          "N+1 query pattern instead of eager loading"
+check "response_model"                        "missing response_model / full ORM row serialized"
 
 if [ "$FAIL" -eq 0 ]; then
   echo "OK: all expected hard-rule violations detected"
