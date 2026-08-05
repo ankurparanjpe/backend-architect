@@ -87,7 +87,7 @@ async def fetch_upstream(item_id: str):
         return await client.get(f"https://upstream/items/{item_id}")
 
 # DO — one client, constructed once, reused across requests
-http_client = httpx.AsyncClient()
+http_client = httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0))
 
 async def fetch_upstream(item_id: str):
     return await http_client.get(f"https://upstream/items/{item_id}")
@@ -99,6 +99,11 @@ mechanism for this — constructing the client once in `lifespan` and storing it
 when no framework is named. See fastapi-architecture § Production deployment → Lifespan
 handlers. When django-architecture/flask-architecture exist, they add their own pointer
 here for their equivalent mechanism.
+
+The `timeout=` on the reused client above is a resilience rule, not a performance one —
+this skill requires the client be reused; resilience-patterns § Timeouts on every
+external call requires that no call through it be unbounded. Both apply to the same
+call site.
 
 ## Connection pool sizing
 

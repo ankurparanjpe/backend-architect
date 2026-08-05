@@ -50,6 +50,7 @@ marketplace, so plugin and marketplace share the name).
 | `backend-observability` | Structured logging, request/correlation ID propagation, service-boundary logging, secret/PII redaction, log level discipline, exception logging with context. |
 | `backend-caching` | Cache layering (HTTP/application/dependency), key design and versioning, invalidation strategy, safe scoping of cached data. |
 | `backend-performance` | Pagination enforcement, HTTP/DB client reuse, connection pool sizing, N+1 query detection, response payload shaping. |
+| `resilience-patterns` | Behavior under failure: explicit timeouts on every outbound call, safe retries (idempotency keys, backoff), circuit breaking / fail-fast on a failing dependency, isolating non-critical downstream calls from the critical path, resumable background jobs. |
 | `testing-standards` | Test pyramid balance (unit for logic, integration at I/O boundaries), test isolation and order independence, fixtures vs mocks, which paths must have tests, contract tests guarding consumer-facing response shapes. |
 
 Planned, not yet implemented: `django-architecture`, `flask-architecture`. Until they exist,

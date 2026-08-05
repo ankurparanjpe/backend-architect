@@ -9,7 +9,7 @@
       "name": "backend-architect",
       "source": "./",
       "description": "Enforces production-grade architecture standards for backend APIs. FastAPI-first, with Django and Flask skills as siblings, plus shared cross-cutting rules for security, observability, caching, and performance, and an /audit-architecture command.",
-      "version": "0.1.9"
+      "version": "0.1.10"
     }
   ]
 }
