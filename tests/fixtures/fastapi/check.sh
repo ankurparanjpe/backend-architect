@@ -40,6 +40,7 @@ check "bare|except"              "bare except around route body"
 check "pool_size|max_overflow|pool.*default"  "pool_size/max_overflow left at defaults"
 check "n\+1|selectinload|joinedload"          "N+1 query pattern instead of eager loading"
 check "response_model"                        "missing response_model / full ORM row serialized"
+check "pytest|tests\.factories|dev depend|dependency group|dev tooling"  "dev/test-only package imported by application code"
 
 if [ "$FAIL" -eq 0 ]; then
   echo "OK: all expected hard-rule violations detected"

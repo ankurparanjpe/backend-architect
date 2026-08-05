@@ -25,3 +25,10 @@ async def fetch_upstream(item_id: str):
     # torn down on every single call instead of reusing one constructed once
     async with httpx.AsyncClient() as client:
         return await client.get(f"https://upstream/items/{item_id}")
+
+
+async def rerank(chunks: list[str]) -> list[str]:
+    """3x faster than the previous implementation (measured locally, 2026-08-01)."""
+    # violation: performance claim about a critical path with nothing repeatable
+    # backing it — measured once by hand, no benchmark committed anywhere
+    return sorted(chunks, key=score)

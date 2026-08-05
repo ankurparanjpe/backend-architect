@@ -36,6 +36,7 @@ check() {
 
 check "pagination|limit|unbounded|bound"   "list endpoint with no pagination/bound enforcement"
 check "client|session|reuse|pool"          "new HTTP/DB client constructed per call instead of reused"
+check "benchmark|claim|measur|repeatable"  "performance claim with no re-runnable benchmark"
 
 if [ "$FAIL" -eq 0 ]; then
   echo "OK: all expected hard-rule violations detected"

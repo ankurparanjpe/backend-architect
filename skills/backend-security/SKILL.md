@@ -114,10 +114,17 @@ class Settings(BaseSettings):
 settings = Settings()
 ```
 
-- `.env` files are for **local development only** — never committed (`.gitignore`
-  it), and never the source of truth in staging/production, where a secret manager or
-  the platform's native secret injection (e.g. ECS task secrets, Kubernetes Secrets)
-  should be used instead.
+- `.env` files hold real values and are for **local development only** — never
+  committed (`.gitignore` it), and never the source of truth in staging/production,
+  where a secret manager or the platform's native secret injection (e.g. ECS task
+  secrets, Kubernetes Secrets) should be used instead.
+- A committed **`.env.example` / `.env.template` is correct practice, not a violation.**
+  It documents the config contract — which variables the app requires — using
+  placeholder values only, with a header stating that the file is committed and holds no
+  real secrets. Flag it only when a real credential has actually been pasted into it: a
+  placeholder or local-only dev value (`POSTGRES_PASSWORD=changeme`) is not a leak, while
+  a live API key or a production DSN in the same file is the same hard violation as any
+  other hardcoded secret.
 - Rotate a secret immediately if it's ever found in a commit, even a since-reverted one
   — git history retains it.
 
@@ -400,7 +407,7 @@ async def delete_post(post: Annotated[Post, Depends(require_post_owner_or_admin)
 | `allow_origins=["*"]` with `allow_credentials=True` | Any origin can make authenticated requests on the user's behalf. | Explicit origin allowlist from config. |
 | Public endpoint with no rate limiting (gateway or app-level) | Open to credential stuffing / resource exhaustion. | Gateway-level limiter, or app middleware if none exists. |
 | Hardcoded secret/API key/credential in source | Permanent in git history once committed. | Env var or secret manager; rotate if ever committed. |
-| `.env` committed to version control | Same as above — leaks whatever it contains. | `.gitignore` it; use a secret manager in staging/prod. |
+| A real `.env` (holding actual credentials) committed to version control | Same as above — leaks whatever it contains, permanently. | `.gitignore` it; use a secret manager in staging/prod. **Not** a violation: a committed `.env.example`/`.env.template` carrying placeholder values only — that's the documented config contract. Flag that file only if a real credential was pasted into it. |
 | No security headers (HSTS, X-Content-Type-Options, X-Frame-Options) set anywhere | Browser has no defense-in-depth if another layer fails. | Global middleware setting standard headers on every response. |
 | Input schema with `extra="allow"` (or framework default that ignores unknown fields) on a write endpoint | Silently accepts fields the client shouldn't be able to set. | `extra="forbid"` (or equivalent) at the boundary. |
 | Privileged field (`role`, `is_admin`, `user_id`) present on a client-writable input schema | Client can set its own privilege level. | Never bind privileged fields from request body; set server-side from auth context. |

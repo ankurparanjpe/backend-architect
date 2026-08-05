@@ -44,9 +44,22 @@ check "200|status code|success.*false" "failure returned as HTTP 200 with error 
 check "shape|inconsistent|schema|envelope" "inconsistent error response shape per route"
 check "leak|internal|stack|trace|str\(exc\)" "internal exception detail leaked to client"
 
+# Negative control: the .env.example placeholder template in the fixture is
+# correct practice, not a violation. Guards the carve-out in § Secrets management
+# against regressing back to "any committed env file is a violation".
+refute() {
+  if grep -qiE "$1" <<< "$OUTPUT"; then
+    echo "FALSE POSITIVE: $2"
+    FAIL=1
+  fi
+}
+
+refute "env[._-]?example|env[._-]?template|\.env committed|env file committed" \
+       ".env.example placeholder template flagged as a committed-secrets violation"
+
 if [ "$FAIL" -eq 0 ]; then
-  echo "OK: all expected hard-rule violations detected"
+  echo "OK: all expected hard-rule violations detected, no false positives"
 else
-  echo "FAIL: backend-security no longer detects one or more expected violations"
+  echo "FAIL: backend-security missed an expected violation or flagged the .env.example control"
   exit 1
 fi

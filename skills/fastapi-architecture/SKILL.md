@@ -4,8 +4,8 @@ description: >
   FastAPI-specific production architecture rules: async vs sync route decisions,
   BackgroundTasks vs Celery/Arq/RQ, Annotated-style dependency injection, SQLAlchemy 2.0
   async conventions, domain-based project structure, ruff linting defaults, Uvicorn/Gunicorn
-  worker and lifespan/health-check patterns, and an anti-patterns checklist for reviewing
-  FastAPI code. Use when the project imports `from fastapi import FastAPI`, instantiates
+  worker and lifespan/health-check patterns, keeping dev tooling out of the deployed
+  artifact's dependency set, and an anti-patterns checklist for reviewing FastAPI code. Use when the project imports `from fastapi import FastAPI`, instantiates
   `FastAPI()`, uses `APIRouter`/`Depends`, or otherwise clearly identifies as a FastAPI app
   (e.g. `main.py` with a FastAPI app, `uvicorn main:app`). Do not use for generic backend
   security, observability, caching, or performance questions with no FastAPI signal — those
@@ -488,6 +488,36 @@ Don't rely on in-flight background tasks (`BackgroundTasks`) surviving shutdown 
 that receives `SIGTERM` mid-task and hits the graceful timeout is killed with the task
 still running.
 
+### Dependency separation — dev tooling stays out of the artifact
+
+**Hard rule**: the deployed artifact installs runtime dependencies only. Linters,
+formatters, type checkers, test frameworks, and test factories/fixtures go in a separate
+dependency group that the production install skips.
+
+```toml
+[project]
+dependencies = ["fastapi", "uvicorn[standard]", "sqlalchemy[asyncio]", "asyncpg",
+                "pydantic-settings"]
+
+[dependency-groups]          # PEP 735; `[project.optional-dependencies]` extras work too
+dev = ["ruff", "mypy", "pytest", "pytest-asyncio", "pre-commit"]
+```
+
+Declaring the split isn't enough — it has to be enforced at install time: `uv sync --no-dev`,
+`poetry install --only main`, or a multi-stage image whose final stage installs from the
+runtime set alone. A single `pip install -r requirements.txt` that happens to list `pytest`
+ships `pytest`.
+
+Two reasons this is a hard rule and not image hygiene:
+
+- Every dev package in the runtime environment is attack surface that serves no request, and
+  a dependency you now have to patch on the production release cadence.
+- It's what keeps application code from importing a dev/test-only package. An `import pytest`
+  or `from tests.factories import ...` inside `src/` passes CI — where the dev group *is*
+  installed — and raises `ModuleNotFoundError` on the first production request. That's a
+  production-only failure the test suite structurally cannot catch, because the suite always
+  runs with those packages present.
+
 ## Linting
 
 Default to `ruff` for linting + formatting (replaces black, isort, autoflake, most of
@@ -498,6 +528,27 @@ ruff check --fix src
 ruff format src
 mypy src
 ```
+
+### Catching the async hard rule at lint time
+
+Enable ruff's `ASYNC` ruleset (flake8-async). This is not a new rule — it's the existing
+[blocking call inside `async def`](#async-vs-sync-routes) hard rule, moved from review-time
+to lint-time, so the same violation fails in CI instead of waiting for a human to spot it in
+a diff:
+
+```toml
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+```
+
+`ASYNC210` flags a blocking HTTP call (`requests.get`) inside `async def`, `ASYNC251` flags
+`time.sleep`, `ASYNC230` flags `open()`, and the `ASYNC22x` rules flag subprocess calls —
+exactly the first two rows of the hard-rule table below. On older ruff versions some of these
+`blocking-*` checks were preview-gated; if they don't fire, check `ruff rule ASYNC251`.
+
+The ruleset narrows this rule's surface, it doesn't close it: a sync ORM/DB driver call, or
+any other third-party blocking library, inside `async def` is invisible to the linter and
+still needs a review pass. Enabling `ASYNC` is not a reason to stop checking for it.
 
 **Always defer to the project's own `pyproject.toml`** if one already configures
 `[tool.ruff]`, `[tool.black]`, or `[tool.mypy]` — don't overwrite or second-guess an
@@ -513,8 +564,8 @@ conventions — see [Scope](#scope).
 
 | Anti-pattern | Why it's wrong | Fix |
 |---|---|---|
-| `requests.get(...)` inside `async def` | Blocks the event loop — `requests` is sync. | Use `httpx.AsyncClient` or `await run_in_threadpool(requests.get, ...)`. |
-| `time.sleep` / `open()` / sync DB driver inside `async def` | Same — blocks the loop. | Use the async equivalent (`asyncio.sleep`, `aiofiles`, async driver). |
+| `requests.get(...)` inside `async def` | Blocks the event loop — `requests` is sync. | Use `httpx.AsyncClient` or `await run_in_threadpool(requests.get, ...)`. Also catchable at lint time via ruff's `ASYNC` ruleset — see [Linting](#catching-the-async-hard-rule-at-lint-time). |
+| `time.sleep` / `open()` / sync DB driver inside `async def` | Same — blocks the loop. | Use the async equivalent (`asyncio.sleep`, `aiofiles`, async driver). ruff's `ASYNC` ruleset catches the `time.sleep`/`open()` cases; a sync DB driver stays a review-time catch. |
 | `from jose import jwt` | `python-jose` is unmaintained. | `import jwt` (PyJWT). |
 | `from async_asgi_testclient import TestClient` | Unmaintained. | `httpx.AsyncClient` + `ASGITransport`. |
 | `model_config = ConfigDict(json_encoders={...})` | Deprecated in Pydantic v2. | `@field_serializer` or `Annotated[T, PlainSerializer(...)]`. |
@@ -532,6 +583,7 @@ conventions — see [Scope](#scope).
 | `pool_size`/`max_overflow` left at SQLAlchemy defaults with no reasoning against worker count | `workers × (pool_size + max_overflow)` can exceed the DB's `max_connections`, or be too small and serialize requests behind pool waits. | Size deliberately against worker count and the DB's connection limit. |
 | Loop issuing one query per row of an earlier result (N+1) | Turns one request into 1+N round trips; cost scales linearly with result size. | `selectinload` (one-to-many) or `joinedload` (to-one) in the original query. |
 | Returning a full ORM row/object with no `response_model` (or one that mirrors every column) | Serializes fields the response contract never promised, including internal-only ones. | Define a `response_model` that projects only the fields the contract needs. |
+| Dev tooling (linter, type checker, test framework, test factories) in the runtime dependency set — or an application module importing a test-only package | Attack surface and patch burden in production for packages that serve no request; and a `pytest`/`tests.*` import inside `src/` passes CI with the dev group installed, then `ModuleNotFoundError`s on the first production request. | Separate dev dependency group, enforced at install time (`uv sync --no-dev`, `poetry install --only main`, multi-stage image). |
 
 ### Structural preferences — advisory, respect existing convention
 

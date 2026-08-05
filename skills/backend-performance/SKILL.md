@@ -3,11 +3,13 @@ name: backend-performance
 description: >
   Cross-cutting backend performance rules that apply regardless of framework: pagination
   enforcement on list endpoints, HTTP/DB client reuse, connection pool sizing, N+1 query
-  detection, and response payload shaping. Use when the work touches list/collection
+  detection, response payload shaping, and backing performance claims with a repeatable
+  benchmark. Use when the work touches list/collection
   endpoints with no pagination, a client or session constructed inside a request handler
-  instead of reused, DB pool configuration, a loop issuing one query per row, or serializing
-  a full ORM object/graph into a response — in any backend framework (FastAPI, Django,
-  Flask, Express, etc.) or with no framework named at all. This skill states the
+  instead of reused, DB pool configuration, a loop issuing one query per row, serializing
+  a full ORM object/graph into a response, or a claim that some critical path got faster —
+  in any backend framework (FastAPI, Django, Flask, Express, etc.) or with no framework
+  named at all. This skill states the
   cross-cutting principle and hard rule; framework-specific mechanism and syntax
   (SQLAlchemy pool arguments, selectinload/joinedload, response_model field projection)
   live in the sibling framework skill (fastapi-architecture, django-architecture,
@@ -34,12 +36,14 @@ This skill enforces two different kinds of rules:
   reasoned about against worker count and the database's max-connections limit, N+1 query
   patterns that turn one request into per-row round trips, and serializing an entire ORM
   object/graph into a response instead of the fields the response contract actually needs.
+  Also flagged: a performance claim about a critical path with no re-runnable benchmark
+  behind it — an unverifiable claim is what lets a regression ship as an improvement.
   These are flagged as violations regardless of the project's age or existing conventions.
 - **Structural preferences** — advisory only: the specific default/max page size chosen
-  for pagination, and the specific pool-size number chosen once it's been reasoned about.
-  These are project/traffic-shape decisions this skill does not prescribe numbers for — if
-  a project has an established convention, don't flag it as a violation; note it only if
-  asked to audit tooling specifically.
+  for pagination, the specific pool-size number chosen once it's been reasoned about, and
+  which benchmark harness runs the measurements. These are project/traffic-shape decisions
+  this skill does not prescribe numbers for — if a project has an established convention,
+  don't flag it as a violation; note it only if asked to audit tooling specifically.
 
 ## Pagination enforcement
 
@@ -164,6 +168,41 @@ specifically (including the double-construction pitfall of also returning an alr
 Pydantic model). Django REST Framework's serializer `fields=`/`exclude=` is the equivalent
 for django-architecture once that skill exists.
 
+## Performance claims need a repeatable benchmark
+
+**Hard rule**: a claim about a critical path's performance — "faster than what it replaced",
+"handles N requests/second", "the cache halved p99" — is backed by a benchmark that lives in
+the repo next to the code it measures and can be re-run. A number produced once by hand in a
+shell or a notebook, then quoted in a commit message, a comment, or a docstring, is not
+evidence: nobody can reproduce it, nobody can tell whether it still holds after the next
+change, and it outlives the machine, dataset, and code it was measured against while still
+reading as current.
+
+```python
+# DON'T — a claim with no way to re-check it. Still in the docstring three
+# refactors later, by then measured against code that no longer exists
+async def rerank(chunks: list[str]) -> list[str]:
+    """3x faster than the previous implementation (measured locally, 2026-08-01)."""
+
+# DO — the claim lives in a runnable benchmark, so the next change either keeps
+# it true or visibly breaks it
+# benchmarks/bench_rerank.py
+def test_rerank_throughput(benchmark, sample_chunks):
+    result = benchmark(rerank, sample_chunks)
+    assert result.stats["mean"] < 0.05
+```
+
+This is the measurement half of every tuning decision in this skill — page size, pool size,
+and eager-loading strategy are each a reasoned choice *then* a measurement, not a guess. See
+fastapi-architecture § Production deployment → Uvicorn/Gunicorn worker config for the same
+stance applied to worker count ("start at a baseline, then measure"); this section is only the
+requirement that the measurement be repeatable rather than one-off.
+
+Two things this rule does not require: a benchmark for every function — the bar is a critical
+path *plus* an actual claim made about it — and a performance gate in CI. Benchmarks are
+load-sensitive and flake on shared runners; running them deliberately against a committed
+baseline is enough.
+
 ## Anti-patterns
 
 ### Hard rules — always flag as violations
@@ -175,6 +214,7 @@ for django-architecture once that skill exists.
 | Connection pool size left at the driver default with no reasoning against worker count / DB max connections | Too small serializes requests behind pool waits; too large (× worker count) exhausts the database's connection limit. | Size the pool deliberately: `workers × pool_size` should stay under the DB's max connections with headroom. |
 | N+1 query pattern (one query per row of an earlier result) | Turns one request into 1+N round trips; cost scales linearly with result size instead of staying constant. | Eager-load the related data in the original query (see the framework skill for ORM-specific syntax). |
 | Serializing a full ORM object/graph into a response | Leaks fields never meant to be public, and wastes CPU/bandwidth on data the client never asked for. | Project only the fields the response contract defines. |
+| Performance claim about a critical path (faster than X, N req/s, p99 improved) with no re-runnable benchmark backing it | A one-off hand measurement can't be reproduced or re-checked, and outlives the code and conditions it was taken under — the claim reads as current long after it stopped being true. | Commit a benchmark next to the code it measures, so the next change either keeps the claim true or visibly breaks it. |
 
 ### Structural preferences — advisory, respect existing convention
 
@@ -182,3 +222,4 @@ for django-architecture once that skill exists.
 |---|---|---|
 | Specific default/max page size chosen for pagination | Traffic-shape/business decision per endpoint, not a correctness rule. | Don't flag; respect the chosen values as long as *some* bound exists. |
 | Specific pool-size number chosen | Depends on worker count, database tier, and traffic profile — no universal number. | Don't flag; respect it as long as it's a reasoned choice, not an untouched default. |
+| Benchmark harness and thresholds (`pytest-benchmark`, `locust`, `k6`, `wrk`, a plain timing script) | Depends on what's being measured and the infrastructure available; the numbers are project-specific. | Don't flag the tool or the threshold; require only that the benchmark exists and re-runs. |

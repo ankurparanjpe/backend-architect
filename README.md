@@ -45,11 +45,11 @@ marketplace, so plugin and marketplace share the name).
 
 | Skill | Covers |
 |---|---|
-| `fastapi-architecture` | FastAPI-specific rules: async vs sync routes, `BackgroundTasks` vs Celery/Arq/RQ, `Annotated` dependency injection, SQLAlchemy 2.0 async conventions, domain-based project structure, ruff defaults, Uvicorn/Gunicorn workers and lifespan/health checks. |
+| `fastapi-architecture` | FastAPI-specific rules: async vs sync routes, `BackgroundTasks` vs Celery/Arq/RQ, `Annotated` dependency injection, SQLAlchemy 2.0 async conventions, domain-based project structure, ruff defaults (including the `ASYNC` ruleset that catches blocking calls at lint time), Uvicorn/Gunicorn workers, lifespan/health checks, and keeping dev tooling out of the deployed dependency set. |
 | `backend-security` | CORS configuration, rate limiting, secrets and env handling, security headers, boundary input validation, error-response standardization (consistent schema, correct status codes, no leaked internals), auth patterns beyond JWT decode. |
 | `backend-observability` | Structured logging, request/correlation ID propagation, service-boundary logging, secret/PII redaction, log level discipline, exception logging with context. |
 | `backend-caching` | Cache layering (HTTP/application/dependency), key design and versioning, invalidation strategy, safe scoping of cached data. |
-| `backend-performance` | Pagination enforcement, HTTP/DB client reuse, connection pool sizing, N+1 query detection, response payload shaping. |
+| `backend-performance` | Pagination enforcement, HTTP/DB client reuse, connection pool sizing, N+1 query detection, response payload shaping, backing performance claims with a repeatable benchmark. |
 | `resilience-patterns` | Behavior under failure: explicit timeouts on every outbound call, safe retries (idempotency keys, backoff), circuit breaking / fail-fast on a failing dependency, isolating non-critical downstream calls from the critical path, resumable background jobs. |
 | `testing-standards` | Test pyramid balance (unit for logic, integration at I/O boundaries), test isolation and order independence, fixtures vs mocks, which paths must have tests, contract tests guarding consumer-facing response shapes. |
 

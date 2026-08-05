@@ -23,6 +23,16 @@ app.add_middleware(  # violation: wildcard origin + credentials
 
 JWT_SECRET = "super-secret-key-123"  # violation: hardcoded secret
 
+# NEGATIVE CONTROL — deliberately NOT a violation. This is the committed
+# .env.example config contract: placeholder values only, no real credentials.
+# The skill must not flag it. See skills/backend-security/SKILL.md § Secrets
+# management (the .env.example carve-out) and check.sh's refute() line.
+ENV_EXAMPLE_TEMPLATE = """
+# .env.example — committed to version control. No real secrets in this file.
+POSTGRES_PASSWORD=changeme
+STRIPE_API_KEY=sk_test_placeholder
+"""
+
 
 class SignupIn(BaseModel):  # violation: no extra="forbid", privileged field bound
     email: str

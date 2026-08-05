@@ -5,6 +5,9 @@ Deliberately violates fastapi-architecture's hard-rule table
 skill's hard-rule detection still fires; see tests/fixtures/fastapi/check.sh.
 """
 
+import pytest  # violation: dev/test-only package imported by application code,
+from tests.factories import make_user  # forcing pytest into the runtime dependency set
+
 import requests
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -43,3 +46,12 @@ async def list_orders_with_items():
 @app.get("/users/{user_id}")  # violation: no response_model, full ORM row serialized
 async def get_user(user_id: str):
     return await db.get(User, user_id)
+
+
+@app.post("/debug/seed")
+async def seed_user():
+    # violation (same rule as the imports above): a test factory called from a
+    # production route — passes CI where the dev group is installed, raises
+    # ModuleNotFoundError on the first production request
+    assert pytest.__version__  # dev-only package used on a request path
+    return make_user(email="seed@example.com")
