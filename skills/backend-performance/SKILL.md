@@ -101,8 +101,8 @@ fastapi-architecture's Lifespan section already demonstrates the FastAPI-specifi
 mechanism for this — constructing the client once in `lifespan` and storing it on
 `app.state`. That skill covers the *how*; this rule covers the *what/why* and applies even
 when no framework is named. See fastapi-architecture § Production deployment → Lifespan
-handlers. When django-architecture/flask-architecture exist, they add their own pointer
-here for their equivalent mechanism.
+handlers, and django-architecture § Client reuse under Django for the module-level /
+`AppConfig.ready()` equivalent. flask-architecture adds its own pointer here once it exists.
 
 The `timeout=` on the reused client above is a resilience rule, not a performance one —
 this skill requires the client be reused; resilience-patterns § Timeouts on every
@@ -139,9 +139,10 @@ for order in orders:
 
 The fix — eager-loading the related data in the original query — is entirely
 ORM-specific, so it's owned by the framework skill: see fastapi-architecture § Database
-for SQLAlchemy's `selectinload`/`joinedload` and when to use each. Django's
-`select_related`/`prefetch_related` is the equivalent for django-architecture once that
-skill exists.
+for SQLAlchemy's `selectinload`/`joinedload` and when to use each, and
+django-architecture § N+1 prevention for Django's `select_related`/`prefetch_related`
+(including the DRF nested-serializer case, where the queryset that needs fixing lives in
+the view rather than where the symptom shows up).
 
 ## Response/payload shaping
 
@@ -165,8 +166,8 @@ async def get_user(user_id: str):
 
 See fastapi-architecture § Anti-patterns for `response_model` discipline in FastAPI
 specifically (including the double-construction pitfall of also returning an already-typed
-Pydantic model). Django REST Framework's serializer `fields=`/`exclude=` is the equivalent
-for django-architecture once that skill exists.
+Pydantic model). See django-architecture § Response shaping for the Django mechanism —
+an explicit `Meta.fields` on the serializer, and why `exclude` is the weaker form.
 
 ## Performance claims need a repeatable benchmark
 

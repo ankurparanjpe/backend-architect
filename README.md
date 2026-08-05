@@ -3,10 +3,10 @@
 [![CI](https://github.com/ankurparanjpe/backend-architect/actions/workflows/ci.yml/badge.svg)](https://github.com/ankurparanjpe/backend-architect/actions/workflows/ci.yml)
 
 A Claude Code plugin that enforces production-grade backend architecture standards while you
-write and review code. It ships one framework skill (FastAPI) plus five cross-cutting skills
-(security, observability, caching, performance, testing) that apply to any backend, and an
-`/audit-architecture` command that runs the applicable ones over a file, path, or diff.
-Django and Flask framework skills are planned siblings, not yet implemented.
+write and review code. It ships two framework skills (FastAPI, Django) plus five
+cross-cutting skills (security, observability, caching, performance, testing) that apply to
+any backend, and an `/audit-architecture` command that runs the applicable ones over a file,
+path, or diff. A Flask framework skill is a planned sibling, not yet implemented.
 
 ## Scope: hard rules vs structural preferences
 
@@ -46,6 +46,7 @@ marketplace, so plugin and marketplace share the name).
 | Skill | Covers |
 |---|---|
 | `fastapi-architecture` | FastAPI-specific rules: async vs sync routes, `BackgroundTasks` vs Celery/Arq/RQ, `Annotated` dependency injection, SQLAlchemy 2.0 async conventions, domain-based project structure, ruff defaults (including the `ASYNC` ruleset that catches blocking calls at lint time), Uvicorn/Gunicorn workers, lifespan/health checks, and keeping dev tooling out of the deployed dependency set. |
+| `django-architecture` | Django-specific rules: one app per bounded domain, the sync-ORM-inside-`async def`-view hazard (sync stays the default), DRF serializers as the input-validation boundary, `select_related`/`prefetch_related` eager loading, serializer `fields` projection, `settings.py` hardening (`DEBUG`, `SECRET_KEY`, `ALLOWED_HOSTS`, CSRF middleware, `check --deploy`), and migration discipline (never edit an applied migration, `makemigrations --check` in CI, `apps.get_model` in data migrations). |
 | `backend-security` | CORS configuration, rate limiting, secrets and env handling, security headers, boundary input validation, error-response standardization (consistent schema, correct status codes, no leaked internals), auth patterns beyond JWT decode. |
 | `backend-observability` | Structured logging, request/correlation ID propagation, service-boundary logging, secret/PII redaction, log level discipline, exception logging with context. |
 | `backend-caching` | Cache layering (HTTP/application/dependency), key design and versioning, invalidation strategy, safe scoping of cached data. |
@@ -53,9 +54,8 @@ marketplace, so plugin and marketplace share the name).
 | `resilience-patterns` | Behavior under failure: explicit timeouts on every outbound call, safe retries (idempotency keys, backoff), circuit breaking / fail-fast on a failing dependency, isolating non-critical downstream calls from the critical path, resumable background jobs. |
 | `testing-standards` | Test pyramid balance (unit for logic, integration at I/O boundaries), test isolation and order independence, fixtures vs mocks, which paths must have tests, contract tests guarding consumer-facing response shapes. |
 
-Planned, not yet implemented: `django-architecture`, `flask-architecture`. Until they exist,
-`/audit-architecture` detects Django/Flask, says the framework skill is missing, and runs
-the cross-cutting skills only.
+Planned, not yet implemented: `flask-architecture`. Until it exists, `/audit-architecture`
+detects Flask, says the framework skill is missing, and runs the cross-cutting skills only.
 
 ## Usage
 

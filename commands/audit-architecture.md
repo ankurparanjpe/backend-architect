@@ -40,9 +40,10 @@ If none match, report "no framework detected — running cross-cutting skills on
 proceed without a framework skill.
 
 If a framework is detected but `skills/<framework>-architecture/SKILL.md` doesn't exist yet
-(currently true for Django and Flask — only `fastapi-architecture` is implemented), say so
-explicitly, e.g. "Framework detected: Django, but django-architecture isn't implemented
-yet — skipping framework-specific check," and proceed with the cross-cutting skills only.
+(currently true for Flask — `fastapi-architecture` and `django-architecture` are
+implemented), say so explicitly, e.g. "Framework detected: Flask, but flask-architecture
+isn't implemented yet — skipping framework-specific check," and proceed with the
+cross-cutting skills only.
 
 ## 4. Build the skill dispatch list
 
