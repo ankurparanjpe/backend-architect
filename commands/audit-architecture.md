@@ -39,9 +39,10 @@ root — for these signals, in this priority order, stopping at the first match:
 If none match, report "no framework detected — running cross-cutting skills only" and
 proceed without a framework skill.
 
-If a framework is detected but `skills/<framework>-architecture/SKILL.md` doesn't exist yet
-(currently true for Flask — `fastapi-architecture` and `django-architecture` are
-implemented), say so explicitly, e.g. "Framework detected: Flask, but flask-architecture
+If a framework is detected but `skills/<framework>-architecture/SKILL.md` doesn't exist
+(all three of fastapi-architecture, django-architecture, and flask-architecture are
+currently implemented, so this is a fallback for a future framework skill, not a live
+case today), say so explicitly, e.g. "Framework detected: <name>, but <name>-architecture
 isn't implemented yet — skipping framework-specific check," and proceed with the
 cross-cutting skills only.
 
