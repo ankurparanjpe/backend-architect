@@ -30,6 +30,11 @@ backend-observability; deciding the behavior belongs here.
 
 ## Scope
 
+**Protocol scope**: these rules are written against request/response HTTP APIs (REST-style).
+Where a rule names an HTTP status code, header, or URL, that's the HTTP mechanism for a
+principle that generalizes across protocols — GraphQL, gRPC, and WebSocket APIs differ in
+mechanism and aren't covered here.
+
 This skill enforces two different kinds of rules:
 
 - **Hard rules** — resilience gaps where a single misbehaving dependency takes down
@@ -90,6 +95,10 @@ Use the driver's statement/query timeout (`statement_timeout` on PostgreSQL,
 `max_execution_time` on MySQL) and whatever the SDK exposes; if an SDK exposes no timeout
 at all, that's a reason to wrap the call, not a reason to skip the rule.
 
+**gRPC note**: gRPC's equivalent of an HTTP client timeout is a per-call deadline
+(a context deadline propagated from client to server), not a status code — set one on
+every call, the same as an HTTP timeout above.
+
 A timeout that fires is a handled failure, not a crash — pair it with one of the
 degradation strategies below so the caller gets a defined answer.
 
@@ -144,7 +153,8 @@ what it already did (see § Async task retries), or surface the failure to a cal
 can decide.
 
 Reads (`GET`), and writes that are naturally idempotent (`PUT` of a full state, a
-`DELETE` of a specific id), are safe to retry without a key.
+`DELETE` of a specific id) — the HTTP/REST idempotency convention — are safe to retry
+without a key.
 
 **Hard rule**: retries have backoff. A tight-loop retry — no delay between attempts —
 turns a dependency's bad moment into a self-inflicted denial of service: the upstream is

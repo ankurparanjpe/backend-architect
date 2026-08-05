@@ -31,6 +31,11 @@ worth arguing about; structure is the part worth leaving alone.
 See [`skills/fastapi-architecture/SKILL.md`](skills/fastapi-architecture/SKILL.md) §Scope
 for the reference wording every skill follows.
 
+The five cross-cutting skills are also scoped to one protocol: they're written against
+request/response HTTP APIs (REST-style). Where a rule names an HTTP status code, header,
+or URL, that's the HTTP mechanism for a principle that generally carries over to other
+protocols — GraphQL, gRPC, and WebSocket APIs differ in mechanism and aren't covered yet.
+
 ## Installation
 
 ```

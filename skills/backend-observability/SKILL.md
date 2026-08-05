@@ -22,6 +22,11 @@ logged/traced and how; the framework skill covers *how* to wire it in that frame
 
 ## Scope
 
+**Protocol scope**: these rules are written against request/response HTTP APIs (REST-style).
+Where a rule names an HTTP status code, header, or URL, that's the HTTP mechanism for a
+principle that generalizes across protocols — GraphQL, gRPC, and WebSocket APIs differ in
+mechanism and aren't covered here.
+
 This skill enforces two different kinds of rules:
 
 - **Hard rules** — observability gaps that cause real incidents or leak sensitive data:
@@ -96,6 +101,12 @@ hand. This matters more in this plugin's target setups than in a monolith: a
 microservice architecture has no other way to trace one user action across process
 boundaries.
 
+**Beyond HTTP headers**: the mechanism above (a header) is HTTP-specific. gRPC carries
+the same correlation ID via call metadata instead of an HTTP header; when interoperating
+with standard tracing tooling, prefer the W3C `traceparent` header over a custom
+`X-Request-ID` for HTTP-to-HTTP propagation. The requirement is unchanged either
+way — every hop carries and forwards the ID.
+
 ## What to log at boundaries
 
 **Hard rule**: log at service boundaries — request in/out (method, path, status,
@@ -126,6 +137,12 @@ async def log_requests(request, call_next):
     )
     return response
 ```
+
+**GraphQL note**: a GraphQL API sends every operation through the same route
+(`POST /graphql`), so a REST-shaped access log (method + path) reads as `POST /graphql`
+for every request and tells you nothing. Log the operation name and type
+(`query`/`mutation`/`subscription`) as fields instead — that's the boundary event that's
+actually distinguishing for a GraphQL service.
 
 ## Never log secrets, tokens, PII, or full sensitive request bodies
 

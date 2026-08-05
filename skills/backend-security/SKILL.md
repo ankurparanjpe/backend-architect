@@ -25,6 +25,11 @@ posture must be; the framework skill covers *how* to wire it in that framework.
 
 ## Scope
 
+**Protocol scope**: these rules are written against request/response HTTP APIs (REST-style).
+Where a rule names an HTTP status code, header, or URL, that's the HTTP mechanism for a
+principle that generalizes across protocols — GraphQL, gRPC, and WebSocket APIs differ in
+mechanism and aren't covered here.
+
 This skill enforces two different kinds of rules:
 
 - **Hard rules** — security issues that are exploitable or fail open: wildcard CORS in
@@ -40,7 +45,7 @@ This skill enforces two different kinds of rules:
 
 ## CORS
 
-**Hard rule**: explicit `allow_origins` list in production. Never `*` (wildcard) once
+**Hard rule** (HTTP/REST — CORS is a browser enforcement mechanism scoped to HTTP): explicit `allow_origins` list in production. Never `*` (wildcard) once
 credentials, cookies, or auth headers are involved — a wildcard origin combined with
 `allow_credentials=True` lets any site read authenticated responses on behalf of a
 logged-in user.
@@ -130,8 +135,8 @@ settings = Settings()
 
 ## Security headers
 
-**Hard rule**: set standard security headers via middleware, not left to the framework's
-defaults (most frameworks set none of these by default).
+**Hard rule** (HTTP/REST): set standard security headers via middleware, not left to the
+framework's defaults (most frameworks set none of these by default).
 
 | Header | Purpose |
 |---|---|
@@ -242,7 +247,7 @@ body, which is a different shape again.
 
 ### Status codes carry the failure
 
-**Hard rule**: the HTTP status code communicates the failure. Returning `200 OK` with a
+**Hard rule** (HTTP/REST status-code convention): the HTTP status code communicates the failure. Returning `200 OK` with a
 failure described in the body is a hard violation — every layer between the service and the
 client (load balancers, proxies, retry logic, HTTP client libraries, error-rate monitoring,
 alerting) reads the status code, so a failure hidden in a `200` body is invisible to all of
@@ -281,6 +286,20 @@ Prefer `404` over `403` when the existence of the resource is itself privileged 
 on `/users/{id}/documents/{doc_id}` confirms that `doc_id` exists, which is an enumeration
 oracle. Pick one behaviour and apply it consistently; alternating between `403` and `404`
 for the same class of resource leaks the same information through the difference.
+
+**GraphQL note**: this rule is written for REST/HTTP-status-per-outcome APIs. GraphQL
+inverts it *by design*, not by violation — per spec, a GraphQL response returns `200 OK`
+with execution failures reported in the response body's `errors` array, including
+resolver/business-logic errors that would be a 4xx in REST. That's correct GraphQL
+behavior, not a violation of the rule above. In GraphQL, reserve a non-200 status for
+transport-level failure (malformed request, server crash); the status code is not where
+GraphQL execution failure gets communicated.
+
+**gRPC note**: gRPC has no HTTP status codes in this sense — it returns its own status
+code set (`OK`, `NOT_FOUND`, `PERMISSION_DENIED`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`,
+etc.) in the response trailer. Map failures to the closest gRPC status rather than
+reusing HTTP's 4xx/5xx numbering; see resilience-patterns § Timeouts on every external
+call for the matching note on gRPC deadlines as the equivalent of an HTTP timeout.
 
 ### Never leak internal detail
 
@@ -397,6 +416,12 @@ def require_post_owner_or_admin(
 async def delete_post(post: Annotated[Post, Depends(require_post_owner_or_admin)]):
     ...
 ```
+
+**GraphQL note**: a GraphQL API typically exposes one endpoint (`POST /graphql`), so
+route/middleware-level authorization checks nothing useful — every operation, whatever
+its permissions, passes through the same route. Authorization must be enforced at the
+resolver/field level instead (a directive like `@auth`, or a check at the top of each
+resolver), the GraphQL equivalent of the dependency layer above.
 
 ## Anti-patterns
 

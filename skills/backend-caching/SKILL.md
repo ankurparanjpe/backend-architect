@@ -24,6 +24,11 @@ practice must be; the framework skill covers *how* to wire it in that framework.
 
 ## Scope
 
+**Protocol scope**: these rules are written against request/response HTTP APIs (REST-style).
+Where a rule names an HTTP status code, header, or URL, that's the HTTP mechanism for a
+principle that generalizes across protocols — GraphQL, gRPC, and WebSocket APIs differ in
+mechanism and aren't covered here.
+
 This skill enforces two different kinds of rules:
 
 - **Hard rules** — caching mistakes that cause silent correctness or security bugs:
@@ -45,9 +50,9 @@ This skill enforces two different kinds of rules:
 Caching applies at three distinct layers — pick the layer that matches what's actually
 expensive, not just the one that's most familiar:
 
-- **HTTP-level** — `ETag`/`Cache-Control` for cacheable `GET` responses, so the client
-  or an intermediary (CDN, reverse proxy) can skip the round trip to your service
-  entirely.
+- **HTTP-level** (REST/HTTP caching semantics) — `ETag`/`Cache-Control` for cacheable
+  `GET` responses, so the client or an intermediary (CDN, reverse proxy) can skip the
+  round trip to your service entirely.
 
   ```python
   # DO — conditional GET, client/CDN can skip re-fetching unchanged data

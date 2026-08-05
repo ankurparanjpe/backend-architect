@@ -27,6 +27,11 @@ must be; the framework skill covers *how* to wire it in that framework.
 
 ## Scope
 
+**Protocol scope**: these rules are written against request/response HTTP APIs (REST-style).
+Where a rule names an HTTP status code, header, or URL, that's the HTTP mechanism for a
+principle that generalizes across protocols — GraphQL, gRPC, and WebSocket APIs differ in
+mechanism and aren't covered here.
+
 This skill enforces two different kinds of rules:
 
 - **Hard rules** — performance mistakes that cause outages or unbounded resource growth
@@ -143,6 +148,12 @@ for SQLAlchemy's `selectinload`/`joinedload` and when to use each, and
 django-architecture § N+1 prevention for Django's `select_related`/`prefetch_related`
 (including the DRF nested-serializer case, where the queryset that needs fixing lives in
 the view rather than where the symptom shows up).
+
+**GraphQL note**: GraphQL's shape of this problem is a resolver that issues one query per
+item in a list field (e.g. an `author` resolver invoked once per post in a `posts` list) —
+same 1+N shape, triggered by field resolution instead of a loop. The equivalent fix is
+DataLoader-style batching: collect the keys requested across resolvers within one tick and
+issue a single batched query, rather than eager-loading in the initial query.
 
 ## Response/payload shaping
 
