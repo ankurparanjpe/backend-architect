@@ -1,5 +1,6 @@
 {
   "name": "backend-architect",
+  "description": "Production-grade backend architecture skills: framework-specific rules for FastAPI/Django/Flask plus cross-cutting security, observability, caching, performance, and resilience guidance.",
   "owner": {
     "name": "Ankur Paranjpe",
     "email": "ankurparanjpe10@gmail.com"
