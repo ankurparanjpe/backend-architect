@@ -115,15 +115,6 @@ back grouped by skill, hard-rule violations separated from advisory notes.
 There is no commit hook, no watcher, and no always-on mode. See [`FAQ.md`](FAQ.md) for why,
 and for what to do when an audit of an older codebase turns up a long list.
 
-## Releases
-
-| Version | Changes |
-|---|---|
-| `0.1.18` | Structural check extended to require both anti-pattern tables and an executable per-skill `check.sh`; framework-skill sibling-boundary lists completed; GraphQL status-code note re-hedged for media-type and pre-execution/execution differences. |
-| `0.1.17` | Documentation polish — [`ROADMAP.md`](ROADMAP.md), [`FAQ.md`](FAQ.md), README/CONTRIBUTING clarity. |
-| `0.1.16` | Flask application-factory rule downgraded from hard rule to advisory, GraphQL status-code wording tightened, deterministic structural CI check (`tests/check_skill_structure.sh`). |
-| `0.1.15` | `resilience-patterns` integration — added to the `/audit-architecture` dispatch list and its fixture regression check, plus framework-skill cross-references. |
-
 ## Documentation
 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — adding a hard rule, proposing a new skill, what CI
@@ -150,14 +141,6 @@ so they need API access, and verifying them is a contributor responsibility. A g
 means the structure, the manifests, and the version bump are fine, not that every skill's
 rules still fire. See
 [`CONTRIBUTING.md` § What CI checks](CONTRIBUTING.md#what-ci-checks).
-
-## Attribution
-
-`fastapi-architecture`'s async/blocking-call reasoning, dependency-injection conventions, and
-domain-based project structure draw on
-[zhanymkanov/fastapi-best-practices](https://github.com/zhanymkanov/fastapi-best-practices).
-Worth reading directly — it's the source material, and covers ground this plugin doesn't
-encode as rules.
 
 ## License
 
