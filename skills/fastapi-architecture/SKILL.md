@@ -8,9 +8,10 @@ description: >
   artifact's dependency set, and an anti-patterns checklist for reviewing FastAPI code. Use when the project imports `from fastapi import FastAPI`, instantiates
   `FastAPI()`, uses `APIRouter`/`Depends`, or otherwise clearly identifies as a FastAPI app
   (e.g. `main.py` with a FastAPI app, `uvicorn main:app`). Do not use for generic backend
-  security, observability, caching, or performance questions with no FastAPI signal — those
-  are covered by the sibling backend-security / backend-observability / backend-caching /
-  backend-performance skills in this plugin.
+  security, observability, caching, performance, resilience, or testing questions with no
+  FastAPI signal — those are covered by the sibling backend-security /
+  backend-observability / backend-caching / backend-performance / resilience-patterns /
+  testing-standards skills in this plugin.
 ---
 
 # FastAPI Architecture
@@ -579,7 +580,7 @@ conventions — see [Scope](#scope).
 | Running Uvicorn directly in prod with no process manager | One crash takes down all capacity. | Gunicorn + `UvicornWorker`, or an orchestrator that restarts the process. |
 | `@app.on_event("startup"/"shutdown")` | Deprecated; doesn't guarantee pairing under reload. | `lifespan` async context manager. |
 | Liveness probe that queries the DB | A slow dependency takes a healthy process out of rotation. | Liveness = process check only; readiness = dependency check. |
-| `httpx.AsyncClient()` constructed inside a route handler instead of reused from `app.state` | Opens a new connection pool and pays setup cost on every request. | Construct once in `lifespan`, store on `app.state`, reuse across requests. |
+| `httpx.AsyncClient()` constructed inside a route handler instead of reused from `app.state` | Opens a new connection pool and pays setup cost on every request. | Construct once in `lifespan`, store on `app.state`, reuse across requests — with a default `timeout=`, see resilience-patterns § Timeouts on every external call. |
 | `pool_size`/`max_overflow` left at SQLAlchemy defaults with no reasoning against worker count | `workers × (pool_size + max_overflow)` can exceed the DB's `max_connections`, or be too small and serialize requests behind pool waits. | Size deliberately against worker count and the DB's connection limit. |
 | Loop issuing one query per row of an earlier result (N+1) | Turns one request into 1+N round trips; cost scales linearly with result size. | `selectinload` (one-to-many) or `joinedload` (to-one) in the original query. |
 | Returning a full ORM row/object with no `response_model` (or one that mirrors every column) | Serializes fields the response contract never promised, including internal-only ones. | Define a `response_model` that projects only the fields the contract needs. |
@@ -587,7 +588,7 @@ conventions — see [Scope](#scope).
 
 ### Structural preferences — advisory, respect existing convention
 
-These follow from the domain-based [project structure](#project-structure-structural-preference---advisory)
+These follow from the domain-based [project structure](#project-structure-structural-preference--advisory)
 recommendation above. Don't flag them as violations in a project with an established,
 different convention — note them only if asked to audit structure specifically, framed as
 "this project uses X" rather than an error.

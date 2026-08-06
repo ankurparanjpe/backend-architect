@@ -12,9 +12,9 @@ description: >
   `INSTALLED_APPS`, models declared via `django.db.models`, Django ORM querysets
   (`Model.objects`, `QuerySet`), or Django REST Framework (`rest_framework`,
   `ModelSerializer`, `ViewSet`). Do not use for generic backend security, observability,
-  caching, or performance questions with no Django signal — those are covered by the
-  sibling backend-security / backend-observability / backend-caching /
-  backend-performance skills in this plugin.
+  caching, performance, resilience, or testing questions with no Django signal — those are
+  covered by the sibling backend-security / backend-observability / backend-caching /
+  backend-performance / resilience-patterns / testing-standards skills in this plugin.
 ---
 
 # Django Architecture
@@ -575,7 +575,7 @@ conventions — see [Scope](#scope).
 | `AddField(null=False)` with no default on a populated table | Fails outright on any table with existing rows. | Add nullable → backfill → alter to non-null, as three migrations. |
 | Business logic in the view body (ORM writes, branching, external calls) | Unreachable from management commands, tasks, and the admin; forces HTTP-level tests for domain rules. | Move to a model method/manager or a service function — see [structure](#project-structure--one-app-per-bounded-domain-structural-preference--advisory). |
 | One app reaching directly into another app's models for queries/behavior | Couples the apps at schema level; a change to one app's internals breaks the other silently. | Call the owning app's public surface. `ForeignKey` across apps is fine. |
-| `requests.Session()`/`httpx.Client()` constructed per view call | New connection pool and TCP/TLS setup on every request. | Module-level client, or `AppConfig.ready()`. See backend-performance § HTTP/DB client reuse. |
+| `requests.Session()`/`httpx.Client()` constructed per view call | New connection pool and TCP/TLS setup on every request. | Module-level client, or `AppConfig.ready()`. See backend-performance § HTTP/DB client reuse, and resilience-patterns § Timeouts on every external call for the deadline that client must carry. |
 | Deployed with `manage.py runserver` | Single-threaded dev server, no process supervision, explicitly not for production. | Gunicorn/uWSGI (WSGI) or Uvicorn/Daphne (ASGI) behind a process manager. |
 
 ### Structural preferences — advisory, respect existing convention

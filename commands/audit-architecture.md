@@ -51,7 +51,7 @@ cross-cutting skills only.
 Start with:
 - the detected/overridden framework skill, if its `SKILL.md` exists
 - `backend-security`, `backend-observability`, `backend-caching`, `backend-performance`,
-  `testing-standards`
+  `resilience-patterns`, `testing-standards`
 
 Remove any skill named in `--skip=`.
 
@@ -80,7 +80,7 @@ skill's rules from bleeding into another's review. Give each subagent:
 ## 6. Aggregate and present, grouped by skill
 
 Render the combined result in this shape, in dispatch order (framework skill first, then
-security, observability, caching, performance):
+security, observability, caching, performance, resilience, testing):
 
 ```
 # Architecture Audit — <target description>

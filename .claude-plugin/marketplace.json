@@ -1,6 +1,6 @@
 {
   "name": "backend-architect",
-  "description": "Production-grade backend architecture skills: framework-specific rules for FastAPI/Django/Flask plus cross-cutting security, observability, caching, performance, and resilience guidance.",
+  "description": "Production-grade backend architecture skills: framework-specific rules for FastAPI/Django/Flask plus cross-cutting security, observability, caching, performance, resilience, and testing guidance.",
   "owner": {
     "name": "Ankur Paranjpe",
     "email": "ankurparanjpe10@gmail.com"
@@ -9,8 +9,8 @@
     {
       "name": "backend-architect",
       "source": "./",
-      "description": "Enforces production-grade architecture standards for backend APIs. FastAPI-first, with Django and Flask skills as siblings, plus shared cross-cutting rules for security, observability, caching, and performance, and an /audit-architecture command.",
-      "version": "0.1.14"
+      "description": "Enforces production-grade architecture standards for backend APIs. FastAPI-first, with Django and Flask skills as siblings, plus shared cross-cutting rules for security, observability, caching, performance, resilience, and testing, and an /audit-architecture command.",
+      "version": "0.1.18"
     }
   ]
 }

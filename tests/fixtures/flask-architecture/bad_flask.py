@@ -10,7 +10,8 @@ import time
 import requests
 from flask import Flask, request
 
-# violation: module-level Flask() instance instead of an application factory
+# not a violation: the module-level instance is a structural preference, not a
+# hard rule — see skills/flask-architecture/SKILL.md § Application factory pattern
 app = Flask(__name__)
 
 # violation: hardcoded config value in source

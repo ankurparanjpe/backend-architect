@@ -1,9 +1,9 @@
 name: CI
 
-# Manifest and description checks only - both are pure text/git checks needing no
-# API key. Fixture regression checks (tests/fixtures/*/check.sh) are deliberately
-# NOT run here: they invoke `claude -p`, so they need an API key and grade
-# non-deterministic output. Contributors run those locally - see CONTRIBUTING.md.
+# Structure, manifest, and description checks only - all pure text/git checks
+# needing no API key. Fixture regression checks (tests/fixtures/*/check.sh) are
+# deliberately NOT run here: they invoke `claude -p`, so they need an API key and
+# grade non-deterministic output. Contributors run those locally - see CONTRIBUTING.md.
 
 on:
   push:
@@ -11,12 +11,15 @@ on:
 
 jobs:
   manifests:
-    name: manifests, version bump, skill descriptions
+    name: structure, manifests, version bump, skill descriptions
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # version check needs the base commit and merge-base
+
+      - name: Check skill/fixture structure
+        run: tests/check_skill_structure.sh
 
       - name: Validate manifests and version bump
         run: |

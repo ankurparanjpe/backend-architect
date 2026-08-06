@@ -291,9 +291,10 @@ permanently-failing task lands in a dead-letter queue instead of retrying foreve
 The mechanism — which runner, how retries and dead-lettering are configured, and why
 in-process background tasks are not durable at all — is owned by the framework skill.
 See fastapi-architecture § Background work for the `BackgroundTasks` vs. Celery/Arq/RQ
-decision and the durability warning; django-architecture/flask-architecture add their
-equivalent pointers here once those skills cover it. Don't restate that mechanism in
-this skill.
+decision and the durability warning, and django-architecture § Async in Django for the
+"long-running or retryable work belongs in Celery / Django-Q / RQ, not a view" line.
+Flask has no in-process background-task facility to defer to, so nothing about the rules
+above changes there. Don't restate runner mechanics in this skill.
 
 ## Advisory: circuit-breaker library and implementation
 

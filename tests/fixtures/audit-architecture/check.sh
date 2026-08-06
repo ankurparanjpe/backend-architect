@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Regression check for the /audit-architecture command: confirms it dispatches to
-# all 6 skills and attributes each fixture's known violations to the correct skill
+# all 7 skills and attributes each fixture's known violations to the correct skill
 # group. Reuses the existing per-skill fixtures instead of planting new violation
 # content. Re-run after any edit to commands/audit-architecture.md or any of the
-# 6 skills' hard-rule tables.
+# 7 skills' hard-rule tables.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 PROMPT=$(cat <<'EOF'
 Simulate the /audit-architecture command on the combined input below, which contains
-six separate files. Framework is FastAPI (confirmed by bad_fastapi.py).
+seven separate files. Framework is FastAPI (confirmed by bad_fastapi.py).
 
-For each of these 6 skills, in this order, using ONLY that skill's own "Hard rules —
+For each of these 7 skills, in this order, using ONLY that skill's own "Hard rules —
 always flag as violations" table, review the file(s) below and output a section:
 
 ## <skill-name>
@@ -22,7 +22,7 @@ One line per hard-rule violation found in ANY of the files below; if a skill fin
 none, output NONE under its header instead.
 
 Skills and order: fastapi-architecture, backend-security, backend-caching,
-backend-observability, backend-performance, testing-standards.
+backend-observability, backend-performance, resilience-patterns, testing-standards.
 
 Do not output anything else: no fixes, no structural-preference notes, no prose
 outside the section headers and VIOLATION/NONE lines.
@@ -33,6 +33,7 @@ for f in tests/fixtures/fastapi/bad_fastapi.py \
          tests/fixtures/backend-caching/bad_caching.py \
          tests/fixtures/backend-observability/bad_observability.py \
          tests/fixtures/backend-performance/bad_performance.py \
+         tests/fixtures/resilience-patterns/bad_resilience.py \
          tests/fixtures/testing-standards/bad_testing.py; do
   echo "--- file: $f ---"
   cat "$ROOT/$f"
@@ -84,6 +85,15 @@ check_in "backend-observability" "exc_info|logger\.exception|stack.trace" "logge
 check_in "backend-performance" "pagination|limit|unbounded|bound" "list endpoint with no pagination/bound enforcement"
 check_in "backend-performance" "client|session|reuse|pool"        "new HTTP/DB client constructed per call instead of reused"
 
+# bad_resilience.py's timeout violations must land here, not under
+# backend-performance — both skills talk about the shared HTTP client, but
+# reuse is performance's rule and the deadline on it is resilience's.
+check_in "resilience-patterns" "timeout|deadline"                 "outbound call with no explicit timeout"
+check_in "resilience-patterns" "idempoten"                        "retry on non-idempotent POST with no usable idempotency key"
+check_in "resilience-patterns" "backoff|tight.loop"               "retries with no backoff"
+check_in "resilience-patterns" "fail.fast|circuit|breaker"        "no fail-fast path for a repeatedly failing dependency"
+check_in "resilience-patterns" "critical path|non.critical|unguarded|isolat" "non-critical call unguarded on the critical path"
+
 # bad_testing.py's mocked-DB violation must land here, not under
 # fastapi-architecture — the two skills cross-reference the same rule, and this
 # is the check that catches the attribution drifting between them.
@@ -93,7 +103,7 @@ check_in "testing-standards" "patch|under test|business logic"    "business logi
 check_in "testing-standards" "contract|response shape|status"     "consumer-facing response shape unguarded"
 
 if [ "$FAIL" -eq 0 ]; then
-  echo "OK: audit-architecture correctly grouped all 27 known violations under their skill"
+  echo "OK: audit-architecture correctly grouped all 32 known violations under their skill"
 else
   echo "FAIL: audit-architecture missed or misattributed one or more expected violations"
   exit 1

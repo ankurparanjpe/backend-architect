@@ -287,13 +287,21 @@ on `/users/{id}/documents/{doc_id}` confirms that `doc_id` exists, which is an e
 oracle. Pick one behaviour and apply it consistently; alternating between `403` and `404`
 for the same class of resource leaks the same information through the difference.
 
-**GraphQL note**: this rule is written for REST/HTTP-status-per-outcome APIs. GraphQL
-inverts it *by design*, not by violation — per spec, a GraphQL response returns `200 OK`
-with execution failures reported in the response body's `errors` array, including
-resolver/business-logic errors that would be a 4xx in REST. That's correct GraphQL
-behavior, not a violation of the rule above. In GraphQL, reserve a non-200 status for
-transport-level failure (malformed request, server crash); the status code is not where
-GraphQL execution failure gets communicated.
+**GraphQL note**: this rule is written for REST/HTTP-status-per-outcome APIs, and GraphQL
+doesn't map onto it cleanly. Two things vary. *Where* the failure happens: a request that
+fails before execution begins — a parse error, a query that doesn't validate against the
+schema — may legitimately carry a non-200 status, while a failure *during* execution (a
+resolver raising, a business rule rejecting) is normally reported as `200` with the failure
+in the `errors` array. And *how the response is negotiated*: under the legacy
+`application/json` media type most servers answer `200` for both cases, whereas the
+`application/graphql-response+json` media type in the GraphQL-over-HTTP specification does
+use status codes to distinguish them. So don't assume one universal mapping — check what
+the server and media type in front of you actually do.
+
+What transfers is the principle, not the mechanism: a failure has to be signalled
+explicitly rather than dressed up as a success. In GraphQL the primary carrier is the
+`errors` array, so the violation worth flagging is a resolver that swallows a failure and
+returns a null field with nothing in `errors` — not the `200` itself.
 
 **gRPC note**: gRPC has no HTTP status codes in this sense — it returns its own status
 code set (`OK`, `NOT_FOUND`, `PERMISSION_DENIED`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`,

@@ -2,7 +2,7 @@
 name: flask-architecture
 description: >
   Flask-specific production architecture rules: application factory pattern (create_app())
-  as the required baseline vs a module-level Flask() instance, Blueprints for domain
+  as the recommended default vs a module-level Flask() instance, Blueprints for domain
   separation, Flask-SQLAlchemy/Flask-Migrate extension init and the circular-import
   footgun between extensions and the factory, Marshmallow/Pydantic input validation in
   place of Flask's lack of built-in serializers, class-based config vs scattered
@@ -10,9 +10,10 @@ description: >
   in, and an anti-patterns checklist for reviewing Flask code. Use when the project
   imports `from flask import Flask`, instantiates `Flask(__name__)`, uses
   `@app.route`/`Blueprint`, Flask-SQLAlchemy, or Flask-RESTful/Flask-RESTX. Do not use for
-  generic backend security, observability, caching, or performance questions with no
-  Flask signal — those are covered by the sibling backend-security /
-  backend-observability / backend-caching / backend-performance skills in this plugin.
+  generic backend security, observability, caching, performance, resilience, or testing
+  questions with no Flask signal — those are covered by the sibling backend-security /
+  backend-observability / backend-caching / backend-performance / resilience-patterns /
+  testing-standards skills in this plugin.
 ---
 
 # Flask Architecture
@@ -25,31 +26,35 @@ Python ≥ 3.11.
 Flask is deliberately minimal — it has no built-in equivalent to Django's apps or
 FastAPI's dependency-injected structure enforcing shape on a project. Most of what
 follows below is convention this skill recommends, not something the framework itself
-enforces or breaks without. Two exceptions still get flagged as hard rules despite that,
-because they're correctness/testability bugs, not layout preferences, even though
-nothing in Flask stops you from writing either one:
+enforces or breaks without. A few things still get flagged as hard rules despite that,
+because they're correctness bugs, not layout preferences, even though nothing in Flask
+stops you from writing them:
 
-- **Hard rules** — a module-level `Flask()` instance instead of an application factory,
-  blocking calls inside an `async def` view, hardcoded config values, and raw
-  `request.get_json()` used with no schema validation. Flagged regardless of the
+- **Hard rules** — blocking calls inside an `async def` view, hardcoded config values,
+  and raw `request.get_json()` used with no schema validation. Flagged regardless of the
   project's age or existing conventions.
-- **Structural preferences** — Blueprint-per-domain layout, config class hierarchy, file
-  structure inside a Blueprint. Advisory only. If a project already has an established
+- **Structural preferences** — the `create_app()` application factory, Blueprint-per-domain
+  layout, config class hierarchy, file structure inside a Blueprint. Advisory only. If a
+  project already has an established
   convention that differs — one monolithic Blueprint, a different config pattern — don't
   flag it as a violation; note it only if asked to audit structure specifically, framed
   as "this project uses X instead of Y," not as an error. The recommendations below are
   for a project starting fresh with no existing convention, not a migration target for
   an established codebase.
 
-## Application factory pattern (hard rule)
+## Application factory pattern (structural preference — advisory)
 
-**Hard rule**: the `Flask` instance is created inside a `create_app()` function, not at
-module import time. A module-level `app = Flask(__name__)` is the anti-pattern to flag.
+> Advisory, not a hard rule — see [Scope](#scope).
+
+The application factory pattern (`create_app()`) is recommended for testability and config
+isolation, especially in larger applications. However, a module-level app is acceptable for
+small, single-config services with no separate test suite requirements. This is a
+structural preference, not a correctness rule.
 
 ```python
-# DON'T — module-level instance: config is fixed at import time, and every
-# test that imports this module gets the same app with no way to swap config
-# or register a fresh extension set for isolation
+# ACCEPTABLE for a small single-config service, but note the ceiling: config is
+# fixed at import time, and every test that imports this module gets the same app
+# with no way to swap config or register a fresh extension set for isolation
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://prod-host/app"
 
@@ -57,7 +62,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://prod-host/app"
 def health():
     return {"ok": True}
 
-# DO — factory: config is a parameter, extensions attach to whatever
+# PREFERRED — factory: config is a parameter, extensions attach to whatever
 # instance the caller builds
 def create_app(config_class=ProdConfig):
     app = Flask(__name__)
@@ -67,7 +72,7 @@ def create_app(config_class=ProdConfig):
     return app
 ```
 
-Why this is a hard rule and not a style choice:
+What the factory buys, and therefore when the module-level form starts costing you:
 
 - **Testing.** A test suite needs an app built against `TestConfig` (a throwaway/in-memory
   DB, `TESTING=True`) without touching the production instance. A module-level `Flask()`
@@ -352,9 +357,8 @@ conventions — see [Scope](#scope).
 
 | Anti-pattern | Why it's wrong | Fix |
 |---|---|---|
-| `app = Flask(__name__)` at module scope | Config fixed at import time; every test import shares one instance; no way to build a second app with different config. | `create_app()` factory, config passed in, extensions attached via `.init_app(app)`. |
-| Extension instantiated with an app bound inside the factory (`SQLAlchemy(app)` inside `create_app()`) | Models can't import a module-level instance that doesn't exist yet — circular import or a second unbound instance. | Create the extension bare at module scope (`db = SQLAlchemy()`), bind with `db.init_app(app)` inside the factory. |
-| Blocking call (`requests.get`, `time.sleep`, sync DB driver) inside an `async def` view | Stalls the event loop Flask spins up to run that view — same hazard as FastAPI/Django's async rule. | Use an async client (`httpx.AsyncClient`), or don't make the view `async def` if it's not awaiting anything async. |
+| Extension instantiated with an app bound inside the factory (`SQLAlchemy(app)` inside `create_app()`) — applies to projects that use a factory | Models can't import a module-level instance that doesn't exist yet — circular import or a second unbound instance. | Create the extension bare at module scope (`db = SQLAlchemy()`), bind with `db.init_app(app)` inside the factory. |
+| Blocking call (`requests.get`, `time.sleep`, sync DB driver) inside an `async def` view | Stalls the event loop Flask spins up to run that view — same hazard as FastAPI/Django's async rule. | Use an async client (`httpx.AsyncClient`), or don't make the view `async def` if it's not awaiting anything async. Either way the call needs an explicit timeout — see resilience-patterns § Timeouts on every external call. |
 | `request.get_json()` (or `.form`/`.args`) read directly into business logic or the ORM with no schema | No type coercion, no required-field check, no bounds; missing key is a 500, wrong type is whatever the DB does with it. | Marshmallow or Pydantic schema at the view boundary; read only the validated result. |
 | Hardcoded DB URL / API key / secret in source, or `os.environ.get("SECRET", "fallback")` | Committed to history; the fallback form silently ships a known value if the env var is ever unset in production. | Read from environment with no default (`os.environ["KEY"]`), fail loudly if absent. See backend-security § Secrets management. |
 | Relation attribute accessed per row of a `.query.all()`/`.all()` result with no eager loading | N+1 — 1 request becomes 1+N round trips, scaling with result size. | `selectinload`/`joinedload` in the original query. |
@@ -363,13 +367,15 @@ conventions — see [Scope](#scope).
 
 ### Structural preferences — advisory, respect existing convention
 
-These follow from the [Blueprint-per-domain](#blueprints-for-domain-separation-structural-preference---advisory)
-recommendation above. Don't flag them as violations in a project with an established,
+These follow from the application-factory and
+[Blueprint-per-domain](#blueprints-for-domain-separation-structural-preference--advisory)
+recommendations above. Don't flag them as violations in a project with an established,
 different convention — note them only if asked to audit structure specifically, framed as
 "this project uses X" rather than an error.
 
-| Pattern | Blueprint-per-domain rationale | If the project uses a different convention |
+| Pattern | Rationale | If the project uses a different convention |
 |---|---|---|
+| `app = Flask(__name__)` at module scope instead of a `create_app()` factory | A factory keeps config a parameter, so tests can build an app against `TestConfig` and dev/staging/prod differ by argument rather than by import-time branching | Note it as "this project uses a module-level app" — not a violation for a small, single-config service with no separate test-suite config; recommend the factory when a test suite or a second config appears |
 | One flat `app.py`/`routes.py` with every route, no Blueprints | Fine for a small app; becomes unclear ownership as routes grow past a handful | Note it as "this project uses a single flat route module" — not a violation for a small or established codebase |
 | A single Blueprint for the whole API instead of one per domain | Loses the domain boundary Blueprints exist to express | Note it as "this project uses one Blueprint for the whole API" — not a violation under an established convention |
 | Config read via scattered `os.environ.get()` calls instead of a `Config` class hierarchy | No single source of truth for what config keys exist or their defaults | Note it as "this project reads config via scattered env lookups" — not a violation as long as no value is hardcoded (that part is the hard rule) |

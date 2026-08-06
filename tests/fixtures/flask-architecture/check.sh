@@ -34,10 +34,17 @@ check() {
   fi
 }
 
-check "Flask\(__name__\)|module.level|factory"      "module-level Flask() instance instead of application factory"
 check "hardcoded|config value"                       "hardcoded config value in source"
 check "get_json|schema|validation"                   "raw request.get_json() with no schema validation"
 check "blocking|requests\.get|time\.sleep|async"      "blocking call inside an async def view"
+
+# Negative assertion: the module-level `app = Flask(__name__)` in the fixture is a
+# structural preference, not a hard rule. Flagging it here is the regression this
+# guards — it means the factory rule drifted back into the hard-rule table.
+if grep -qiE "VIOLATION.*(factory|module.level|create_app)" <<< "$OUTPUT"; then
+  echo "UNEXPECTED violation: module-level Flask() is advisory, not a hard rule"
+  FAIL=1
+fi
 
 if [ "$FAIL" -eq 0 ]; then
   echo "OK: all expected hard-rule violations detected"
