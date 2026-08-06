@@ -66,12 +66,6 @@ cross-cutting skill's `## Scope` states the HTTP/REST protocol assumption up fro
 labeled boundary is coverage of a kind; an unlabeled one is a wrong answer waiting to
 happen.
 
-Each gap is a skill-sized piece of work. They'll be added when:
-
-- Maintainer bandwidth exists
-- User demand signals a specific gap (open an issue)
-- A contributor has production expertise in that area (see [`CONTRIBUTING.md`](CONTRIBUTING.md))
-
 ## Contributing a new skill
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full process. In short: pick a gap, propose
